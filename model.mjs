@@ -5,9 +5,9 @@ export const menu = [
 ];
 export const statuses = ['รอร้านรับ', 'กำลังทำ', 'กำลังจัดส่ง', 'ส่งแล้ว'];
 
-export function createOrder({ id, buyer, item, quantity, zone }) {
-  const listing = menu.find(entry => entry.id === item && entry.zone === zone);
-  if (!listing || !Number.isInteger(quantity) || quantity < 1 || quantity > 20) return null;
+export function createOrder({ id, buyer, item, quantity, zone, listings = menu }) {
+  const listing = listings.find(entry => entry.id === item && entry.zone === zone);
+  if (!listing || listing.paused || !Number.isInteger(quantity) || quantity < 1 || quantity > 20) return null;
   return { id, buyer, item, quantity, zone, total: listing.price * quantity, status: 0, history: [{ label: statuses[0], at: Date.now() }] };
 }
 
