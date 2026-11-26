@@ -38,7 +38,8 @@ function orderCard(order) {
   return '<article class="order-card"><div class="order-meta"><strong>ออเดอร์ #' +
     escapeText(order.id.slice(0, 8).toUpperCase()) + '</strong><span class="order-state" data-state="' +
     (order.closed ? 'closed' : order.status) + '">' + (order.closed ?? statuses[order.status]) +
-    '</span></div><h3>' + escapeText(item.name) + ' × ' + order.quantity + '</h3><p>' +
+    '</span></div><h3>' + (order.lines ?? [{ name: item.name, quantity: order.quantity }]).map(line =>
+      escapeText(line.name) + ' × ' + line.quantity).join(' · ') + '</h3><p>' +
     escapeText(item.shop) + ' · ฿' + order.total + '</p>' +
     delivery + (order.payment ? '<p>ชำระ ' + paymentLabels[order.payment] +
       ' · รับอาหาร ' + handoffLabels[order.handoff] + '</p>' : '') + score + next + close + rate + '<details data-panel="history-' + order.id +
@@ -70,6 +71,10 @@ let seller;
 let customer;
 let demoShop;
 let checkout;
+let storeTab = 'menu';
+let favoritesOnly = false;
+const favorites = new Set(read('village-food-favorites-v1', []));
+const cart = new Map();
 let challenge;
 
 const listings = () => [...menu, ...catalog.items];
@@ -102,6 +107,8 @@ function show(view, selectedShop = '') {
   currentView = view;
   document.body.dataset.mode = view;
   orderFilter = 'all';
+  storeTab = 'menu';
+  favoritesOnly = false;
   search = '';
   shopFilter = selectedShop;
   categoryFilter = '';
@@ -124,6 +131,15 @@ function show(view, selectedShop = '') {
 }
 
 get('main').addEventListener('click', event => {
+  const favorite = event.target.closest('[data-favorite]');
+  if (favorite) {
+    const id = favorite.dataset.favorite;
+    if (favorites.has(id)) favorites.delete(id);
+    else favorites.add(id);
+    localStorage.setItem('village-food-favorites-v1', JSON.stringify([...favorites]));
+    render();
+    return;
+  }
   const action = event.target.closest('[data-page]');
   const view = action?.dataset.page;
   if (view === 'seller') {
@@ -167,22 +183,31 @@ get('#customer-form').onsubmit = event => {
   }
 };
 
-async function readQR(file) {
+async function readImage(file, optimize = false) {
   if (!file.size) return '';
-  if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type) || file.size > 512 * 1024) {
-    throw new Error('ใช้ภาพ PNG, JPG หรือ WebP ขนาดไม่เกิน 512 KB');
+  if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type) || file.size > (optimize ? 6 * 1024 : 512) * 1024) {
+    throw new Error('ใช้ภาพ PNG, JPG หรือ WebP ขนาดไม่เกิน ' + (optimize ? '6 MB' : '512 KB'));
   }
   let image;
   try {
     image = await createImageBitmap(file);
   } catch {
-    throw new Error('เปิดภาพ QR ไม่ได้ กรุณาเลือกไฟล์ใหม่');
+    throw new Error('เปิดภาพไม่ได้ กรุณาเลือกไฟล์ใหม่');
+  }
+  if (optimize) {
+    const scale = Math.min(1, 960 / Math.max(image.width, image.height));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(image.width * scale));
+    canvas.height = Math.max(1, Math.round(image.height * scale));
+    canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height);
+    image.close();
+    return canvas.toDataURL('image/webp', .8);
   }
   image.close();
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(reader.result);
-    reader.onerror = () => reject(new Error('อ่านภาพ QR ไม่ได้ กรุณาเลือกไฟล์ใหม่'));
+    reader.onerror = () => reject(new Error('อ่านภาพไม่ได้ กรุณาเลือกไฟล์ใหม่'));
     reader.readAsDataURL(file);
   });
 }
@@ -200,7 +225,7 @@ get('#request').onsubmit = async event => {
   get('#verify').hidden = true;
   event.submitter.disabled = true;
   try {
-    const qr = await readQR(data.get('qr'));
+    const qr = await readImage(data.get('qr'));
     if (currentView !== 'registration') return;
     const code = String(crypto.getRandomValues(new Uint32Array(1))[0] % 1000000).padStart(6, '0');
     challenge = { name, offer, qr, phone: data.get('phone'), code,
@@ -265,14 +290,78 @@ function itemCategory(item) {
   return Object.hasOwn(categories, item.category) ? item.category : 'other';
 }
 
-const menuPhotos = { rice: 'rice', noodles: 'noodles', 'mango-rice': 'dessert', 'thai-tea': 'tea' };
+const menuPhotos = {
+  rice: 'rice', noodles: 'noodles', 'mango-rice': 'dessert', 'thai-tea': 'tea',
+  'pad-thai': 'pad-thai', 'green-curry': 'green-curry', 'grilled-pork': 'grilled-pork',
+  'coconut-pancakes': 'coconut-pancakes',
+};
+
+const shopProfile = id => catalog.shops.find(shop => shop.id === id);
+const bangkokClock = new Intl.DateTimeFormat('en-GB', {
+  timeZone: 'Asia/Bangkok', hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+});
+
+function accepting(id) {
+  const shop = shopProfile(id);
+  if (shop?.closed) return false;
+  if (!shop?.opens || !shop.closes) return true;
+  const time = bangkokClock.format();
+  return shop.opens < shop.closes
+    ? time >= shop.opens && time < shop.closes
+    : time >= shop.opens || time < shop.closes;
+}
+
+function imageSource(image) {
+  return /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(image ?? '') ? image : '';
+}
+
+function foodImage(item) {
+  return imageSource(item.image) || (menuPhotos[item.id] ? './food-' + menuPhotos[item.id] + '.webp' : '');
+}
+
+function shopImage(id, items) {
+  return imageSource(shopProfile(id)?.cover) || items.map(foodImage).find(Boolean) || '';
+}
+
+function attr(value) {
+  return escapeText(value).replaceAll('"', '&quot;');
+}
+
+function shopStatus(id) {
+  const isOpen = accepting(id);
+  return '<span class="shop-status" data-open="' + isOpen + '">' +
+    (isOpen ? 'เปิดรับออเดอร์' : 'ปิดรับออเดอร์') + '</span>';
+}
+
+function favoriteButton(id) {
+  const saved = favorites.has(id);
+  return '<button class="favorite" data-favorite="' + attr(id) + '" aria-label="ร้านโปรด" aria-pressed="' +
+    saved + '">' + (saved ? '♥' : '♡') + '</button>';
+}
+
+function cartLines() {
+  const items = new Map(listings().map(item => [item.id, item]));
+  return [...cart].filter(([id]) => items.has(id)).map(([id, quantity]) => ({ item: items.get(id), quantity }));
+}
+
+const totalFor = lines => lines.reduce((sum, line) => sum + line.item.price * line.quantity, 0);
+
+function renderCartBar() {
+  const bar = get('#cart-bar');
+  if (!bar) return;
+  const lines = cartLines();
+  bar.hidden = !lines.length;
+  if (lines.length) bar.innerHTML = '<button data-open-cart><span aria-hidden="true">🛒</span> ดูตะกร้า (' +
+    lines.reduce((sum, line) => sum + line.quantity, 0) + ' รายการ) <strong>฿' + totalFor(lines) + '</strong></button>';
+}
+
 
 function openShops(items) {
   const shops = new Map();
   for (const item of items) {
     const id = shopId(item);
-    if (!shops.has(id)) shops.set(id, { name: item.shop, count: 0 });
-    shops.get(id).count += 1;
+    if (!shops.has(id)) shops.set(id, { name: item.shop, items: [] });
+    shops.get(id).items.push(item);
   }
   return shops;
 }
@@ -282,9 +371,13 @@ function shopCards(shops, home = false) {
     const value = escapeText(id).replaceAll('"', '&quot;');
     const action = home ? 'data-page="buyer" data-home-shop="' + value + '"'
       : 'data-shop-choice="' + value + '" aria-pressed="' + (id === shopFilter) + '"';
-    return '<button type="button" class="shop-card" ' + action + '><span class="shop-mark" aria-hidden="true">' +
-      escapeText(shop.name.match(/^[เแโใไ]([ก-ฮ])/)?.[1] ?? [...shop.name][0] ?? '•') + '</span><span><strong>' + escapeText(shop.name) +
-      '</strong><small>' + shop.count + ' เมนู</small></span></button>';
+    const cover = shopImage(id, shop.items);
+    return '<div class="shop-row" data-shop-row="' + value + '"><button type="button" class="shop-card" ' + action + '>' +
+      (cover ? '<img class="shop-thumbnail" src="' + cover + '" alt="" loading="lazy">' :
+        '<span class="shop-mark" aria-hidden="true">🏪</span>') +
+      '<span><strong>' + escapeText(shop.name) + '</strong><small>' + shop.items.length + ' เมนู · ' +
+      rating(id) + '</small>' + shopStatus(id) + '</span></button>' + favoriteButton(id) + '</div>';
+
   }).join('');
 }
 
@@ -297,38 +390,75 @@ const categoryIcons = { meals: '🍛', noodles: '🍜', sides: '🍲', snacks: '
 
 function buyerNavigation() {
   return '<nav class="app-nav" aria-label="เมนูผู้ซื้อ">' +
-    '<a href="#buyer-top"><span aria-hidden="true">⌂</span>หน้าหลัก</a>' +
-    '<a href="#choose-shop"><span aria-hidden="true">▤</span>ร้านค้า</a>' +
+    '<button data-shop-choice=""><span aria-hidden="true">⌂</span>หน้าหลัก</button>' +
+    '<button data-shop-choice="" data-shop-scroll><span aria-hidden="true">▤</span>ร้านค้า</button>' +
     '<a href="#my-orders"><span aria-hidden="true">≡</span>คำสั่งซื้อ</a>' +
     (customer ? '<button data-page="edit-customer"><span aria-hidden="true">◉</span>โปรไฟล์</button>' :
       '<button data-page="buyer"><span aria-hidden="true">◉</span>ลงทะเบียน</button>') + '</nav>';
 }
 
-function buyerMenu() {
-  const available = listings().filter(item => !item.paused);
-  const shops = openShops(available);
-  if (!shops.has(shopFilter)) shopFilter = '';
-  const shopButtons = '<button type="button" class="shop-card all-shops" data-shop-choice="" aria-pressed="' +
-    (shopFilter === '') + '">ทุกร้าน</button>' + shopCards(shops);
-  const cards = available.map(item => {
-    const photo = menuPhotos[item.id];
+function foodCards(items, compact = false) {
+  return items.map(item => {
+    const photo = foodImage(item);
+    const isOpen = accepting(shopId(item));
+    if (compact) {
+      return '<article class="food-card store-item">' +
+        (photo ? '<img class="food-photo" src="' + photo + '" alt="" loading="lazy">' : '<span class="store-item-placeholder" aria-hidden="true">🍴</span>') +
+        '<div class="store-item-info"><h3>' + escapeText(item.name) + '</h3><strong>฿' + item.price + '</strong>' +
+        (item.description ? '<p>' + escapeText(item.description) + '</p>' : '') + '</div>' +
+        '<form data-item="' + item.id + '"><input name="quantity" type="hidden" value="1">' +
+        '<button aria-label="เพิ่มลงตะกร้า ' + attr(item.name) + '"' + (isOpen ? '' : ' disabled') +
+        '><span aria-hidden="true">+</span></button></form></article>';
+    }
     return '<article class="food-card">' +
-      (photo ? '<img class="food-photo" src="./food-' + photo + '.webp" alt="" loading="lazy" width="480" height="360">' : '') +
+      (photo ? '<img class="food-photo" src="' + photo + '" alt="" loading="lazy" width="480" height="360">' : '') +
       '<div class="food-content"><div class="food-heading"><h3>' + escapeText(item.name) +
       '</h3><strong class="price">฿' + item.price + '</strong></div><p class="shop-name">' +
       escapeText(item.shop) + ' · ' + categories[itemCategory(item)] + '</p>' +
       (item.description ? '<p>' + escapeText(item.description) + '</p>' : '') +
-      '<p class="rating">' + rating(shopId(item)) + '</p><form data-item="' + item.id +
-      '"><label>จำนวน<input name="quantity" type="number" min="1" max="20" value="1" required></label>' +
-      '<button>ตรวจสอบออเดอร์</button></form></div></article>';
+      '<form data-item="' + item.id + '"><label>จำนวน<input name="quantity" type="number" min="1" max="20" value="1" required></label>' +
+      '<button' + (isOpen ? '' : ' disabled') + '><span aria-hidden="true">＋ </span>' +
+      (isOpen ? 'เพิ่มลงตะกร้า' : 'ร้านปิดรับออเดอร์') + '</button></form></div></article>';
   }).join('');
+}
+
+function storefront(shop, id) {
+  const profile = shopProfile(id);
+  const cover = shopImage(id, shop.items);
+  const reviews = orders.filter(order => order.score && (order.shopId === id || sellerOwns(order, id)));
+  const tabs = { menu: 'เมนู', reviews: 'รีวิว', info: 'ข้อมูลร้าน' };
+  const content = storeTab === 'menu'
+    ? '<div class="store-menu">' + foodCards(shop.items, true) + '</div>'
+    : storeTab === 'reviews'
+      ? '<h2>รีวิวจากออเดอร์ที่ส่งแล้ว</h2><p>' + rating(id) + '</p>' +
+        reviews.map(order => '<article>★ ' + order.score + '/5</article>').join('')
+      : '<h2>ข้อมูลร้าน</h2><p>' + escapeText(profile?.offer ?? 'ร้านอาหารในหมู่บ้าน') + '</p><p>ร้านจัดส่งถึงบ้าน</p>';
+  return '<div class="store-cover">' + (cover ? '<img src="' + cover + '" alt="">' : '') +
+    '<button class="cover-back" data-shop-choice="" aria-label="กลับไปหน้าร้านค้า">‹</button>' +
+    favoriteButton(id) + '</div><div class="store-details"><h1>' + escapeText(shop.name) + '</h1><p>★ ' + rating(id) +
+    ' ' + shopStatus(id) + '</p>' +
+    '<p>จัดส่งในหมู่บ้าน · ' + (profile?.opens && profile?.closes ? profile.opens + '–' + profile.closes : 'ตรวจสถานะรับออเดอร์ก่อนสั่ง') +
+    '</p></div><div class="store-tabs" role="group" aria-label="ข้อมูลหน้าร้าน">' +
+    Object.entries(tabs).map(([key, label]) => '<button type="button" data-store-tab="' + key +
+      '" aria-pressed="' + (key === storeTab) + '">' + label + '</button>').join('') + '</div>' +
+    content + '<h2 id="my-orders">ติดตามออเดอร์ของฉัน</h2>' + buyerNavigation() + '<div id="cart-bar" hidden></div>';
+}
+
+function buyerMenu() {
+  const available = listings().filter(item => !item.paused);
+  const shops = openShops(available);
+  if (shops.has(shopFilter)) return storefront(shops.get(shopFilter), shopFilter);
+  shopFilter = '';
+  const shopButtons = shopCards(favoritesOnly ? [...shops].filter(([id]) => favorites.has(id)) : shops);
+  const cards = foodCards(available);
   const profile = customer
     ? '<p>จัดส่งให้ ' + escapeText(customer.name) + ' · ' + escapeText(customerAddress(customer)) +
       '</p><button class="secondary" data-page="edit-customer">แก้ไขที่อยู่</button> ' +
       '<button class="secondary" data-page="guest">สั่งแทน</button> '
     : '<p>กรอกที่อยู่ของผู้รับตอนยืนยันออเดอร์</p>';
   const heading = customer ? 'สั่งอาหารใกล้บ้าน' : 'สั่งแทน';
-  return '<div class="market-heading" id="buyer-top"><div><h1>' + heading + '</h1>' + profile + '</div></div>' +
+  return '<div class="market-heading" id="buyer-top"><div><h1>' + heading + '</h1>' + profile +
+    '</div><a class="orders-bell" href="#my-orders" aria-label="ดูคำสั่งซื้อ">🔔</a></div>' +
     '<div class="market-filters"><label>ค้นหาอาหารหรือร้าน<input id="menu-search" type="search" placeholder="เช่น ข้าวกะเพรา"></label></div>' +
     '<div class="category-strip" role="group" aria-label="หมวดอาหาร">' +
     [['', 'ทั้งหมด'], ...Object.entries(categories)].map(([id, name]) =>
@@ -336,23 +466,31 @@ function buyerMenu() {
       '"><span aria-hidden="true">' + (categoryIcons[id] ?? '☷') + '</span>' + name + '</button>').join('') +
     '</div><a class="food-banner" href="#choose-shop"><strong>เมนูวันนี้<br>ในหมู่บ้าน</strong>' +
     '<img src="./market-hero.webp" alt="" width="900" height="600"><span aria-hidden="true">›</span></a>' +
-    '<h2 id="choose-shop">เลือกร้าน</h2><div class="shop-picker shop-grid" role="group" aria-labelledby="choose-shop">' +
-    shopButtons + '</div><h2>เมนูอาหาร</h2><div class="food-grid">' + cards +
+    '<div class="shop-list-heading"><h2 id="choose-shop">ร้านค้าในหมู่บ้าน</h2><button class="secondary" data-show-favorites aria-pressed="' +
+    favoritesOnly + '">ร้านโปรด</button></div><div class="shop-picker shop-grid" role="group" aria-labelledby="choose-shop">' +
+    (shopButtons || '<p>ยังไม่มีร้านโปรด</p>') + '</div><h2>เมนูอาหาร</h2><div class="food-grid">' + cards +
     '</div><p id="menu-empty" hidden>ไม่พบเมนู ลองเปลี่ยนคำค้น ร้าน หรือหมวดอาหาร</p>' +
-    '<h2 id="my-orders">ติดตามออเดอร์ของฉัน</h2>' + buyerNavigation();
+    '<h2 id="my-orders">ติดตามออเดอร์ของฉัน</h2>' + buyerNavigation() + '<div id="cart-bar" hidden></div>';
 }
 
 function filterMenu() {
   const query = search.trim().toLocaleLowerCase('th');
   const items = new Map(listings().map(item => [item.id, item]));
   let count = 0;
+  const matches = new Set();
   for (const card of document.querySelectorAll('.food-card')) {
     const item = items.get(card.querySelector('[data-item]').dataset.item);
     const text = [item.name, item.shop, item.description].join(' ').toLocaleLowerCase('th');
     card.hidden = !text.includes(query) ||
       (shopFilter !== '' && shopId(item) !== shopFilter) ||
       (categoryFilter !== '' && itemCategory(item) !== categoryFilter);
-    if (!card.hidden) count += 1;
+    if (!card.hidden) {
+      count += 1;
+      matches.add(shopId(item));
+    }
+  }
+  for (const row of get('#view').querySelectorAll('[data-shop-row]')) {
+    row.hidden = Boolean(query || categoryFilter) && !matches.has(row.dataset.shopRow);
   }
   get('#menu-empty').hidden = count > 0;
 }
@@ -383,19 +521,24 @@ function refreshPayment(form) {
 }
 
 function checkoutForm() {
-  const { item, quantity } = checkout;
+  const { item, lines } = checkout;
   const address = customer
     ? '<p>จัดส่งให้ ' + escapeText(customer.name) + ' · ' + escapeText(customerAddress(customer)) + '</p>'
     : '<fieldset><legend>ที่อยู่ของผู้รับ</legend>' +
       '<label>บ้านเลขที่<input name="house" maxlength="30" required></label>' +
       '<label>เฟส<input name="phase" maxlength="30" required></label>' +
       '<label>ซอย<input name="lane" maxlength="30" required></label></fieldset>';
-  const photo = menuPhotos[item.id];
+  const photo = foodImage(item);
   return '<div class="checkout-summary">' +
-    (photo ? '<img src="./food-' + photo + '.webp" alt="" width="480" height="360">' : '') +
-    '<div><h1>ตรวจสอบและยืนยันออเดอร์</h1><p>' + escapeText(item.name) + ' × ' +
-    quantity + ' · ร้าน ' + escapeText(item.shop) +
-    '</p><p><strong>ยอดรวม ฿' + item.price * quantity + '</strong> · ส่งฟรีในรอบทดลอง</p></div></div>' +
+    (photo ? '<img src="' + photo + '" alt="" width="480" height="360">' : '') +
+    '<div><h1>ตะกร้าและยืนยันออเดอร์</h1><p>ร้าน ' + escapeText(item.shop) + '</p><ul class="cart-lines">' +
+    lines.map(line => '<li>' + escapeText(line.item.name) + ' × ' + line.quantity +
+      ' · ฿' + line.item.price * line.quantity + ' <button type="button" class="secondary" data-cart-adjust="' + line.item.id +
+      '" data-delta="-1" aria-label="ลดจำนวน ' + attr(line.item.name) + '">−</button> ' +
+      '<button type="button" class="secondary" data-cart-adjust="' + line.item.id +
+      '" data-delta="1" aria-label="เพิ่มจำนวน ' + attr(line.item.name) + '">+</button> ' +
+      '<button type="button" class="secondary" data-cart-adjust="' + line.item.id + '" data-delta="0">นำออก</button></li>').join('') +
+    '</ul><p><strong>ยอดรวม ฿' + totalFor(lines) + '</strong> · ส่งฟรีในรอบทดลอง</p></div></div>' +
     '<form data-checkout>' + address + '<fieldset><legend>วิธีชำระเงิน</legend>' +
     '<label><input type="radio" name="payment" value="cash" checked>เงินสด</label>' +
     '<label><input type="radio" name="payment" value="transfer">โอน / สแกน QR</label>' +
@@ -421,13 +564,16 @@ function sellerMenu(shopOrders) {
     return orderGroup(order) === 'done' && deliveredAt && dayInThailand.format(deliveredAt) === today;
   }).reduce((sum, order) => sum + order.total, 0);
   const dashboard = '<div class="seller-dashboard" id="seller-top"><h1>โหมดแม่ค้า</h1><h2>' +
-    escapeText(demoShop ?? seller.name) + '</h2><div class="seller-stats">' +
-    '<a href="#seller-orders">คำสั่งซื้อใหม่<strong>' + newCount + ' รายการ</strong></a>' +
-    '<div>ยอดออเดอร์ที่ส่งแล้ววันนี้<strong>฿' + sales.toLocaleString('th-TH') + '</strong></div></div></div>';
+    escapeText(demoShop ?? seller.name) + '</h2>' +
+    (demoShop ? '' : '<button class="shop-switch" data-toggle-shop aria-pressed="' + !seller.closed + '">' +
+      (seller.closed ? 'เปิดรับออเดอร์' : 'พักรับออเดอร์') + '</button> ' + shopStatus(seller.id)) +
+    '<div class="seller-stats" id="seller-report">' +
+    '<a href="#seller-orders"><span aria-hidden="true">📋</span>คำสั่งซื้อใหม่<strong>' + newCount + ' รายการ</strong></a>' +
+    '<div><span aria-hidden="true">📈</span>ยอดออเดอร์ที่ส่งแล้ววันนี้<strong>฿' + sales.toLocaleString('th-TH') + '</strong></div></div></div>';
   const navigation = '<nav class="app-nav" aria-label="เมนูแม่ค้า">' +
     '<a href="#seller-top"><span aria-hidden="true">⌂</span>หน้าหลัก</a>' +
     '<a href="#seller-orders"><span aria-hidden="true">≡</span>คำสั่งซื้อ</a>' +
-    (demoShop ? '' : '<a href="#seller-menu"><span aria-hidden="true">▤</span>จัดการเมนู</a>') + '</nav>';
+    (demoShop ? '' : '<a href="#seller-menu"><span aria-hidden="true">▤</span>จัดการเมนู</a>') + '<a href="#seller-report"><span aria-hidden="true">▥</span>รายงาน</a></nav>';
   const tabs = Object.entries(sellerFilters).map(([id, label]) => {
     const count = shopOrders.filter(order => id === 'all' || orderGroup(order) === id).length;
     return '<button type="button" data-order-filter="' + id + '" aria-pressed="' +
@@ -436,7 +582,8 @@ function sellerMenu(shopOrders) {
   const orderSection = '<h2 id="seller-orders">คำสั่งซื้อ</h2><div class="order-tabs" role="group" aria-label="สถานะออเดอร์">' +
     tabs + '</div>' + navigation;
   const cards = catalog.items.filter(item => item.shopId === seller.id).map(item =>
-    '<article><h3>' + escapeText(item.name) + '</h3><p>' + escapeText(item.description) +
+    '<article class="seller-listing">' + (foodImage(item) ? '<img src="' + foodImage(item) + '" alt="">' : '') +
+    '<h3>' + escapeText(item.name) + '</h3><p>' + escapeText(item.description) +
     ' · ฿' + item.price + ' · ' + (item.paused ? 'พักขาย' : 'กำลังขาย') +
     '</p><button class="secondary" data-toggle="' + item.id + '" data-paused="' +
     Boolean(item.paused) + '">' + (item.paused ? 'เปิดขาย' : 'พักขาย') + '</button></article>').join('');
@@ -445,20 +592,34 @@ function sellerMenu(shopOrders) {
   const selector = '<label>ร้านที่จัดการ<select id="managed-shop"><option value="">ร้านของฉัน</option>' +
     demoOptions + '</select></label>';
   if (demoShop) return dashboard + selector + orderSection;
-  return dashboard + '<p>' + escapeText(seller.offer) +
-    '</p>' + selector +
-    '<details data-panel="shop-qr"><summary>QR รับโอนของร้าน</summary><form data-shop-qr>' +
+  return dashboard + '<div class="seller-tools">' +
+    '<a href="#seller-menu"><span aria-hidden="true">🍴</span>จัดการเมนู</a>' +
+    '<a href="#shop-settings"><span aria-hidden="true">🏪</span>แก้ไขหน้าร้าน</a>' +
+    '<a href="#shop-hours"><span aria-hidden="true">◷</span>เวลาเปิด–ปิด</a>' +
+    '<a href="#shop-payment"><span aria-hidden="true">▣</span>ตั้งค่า QR</a></div>' + selector +
+    '<h2 id="shop-settings">แก้ไขหน้าร้าน</h2><form data-shop-settings>' +
+    '<label>ชื่อร้าน<input name="name" maxlength="60" value="' + attr(seller.name) + '" required></label>' +
+    '<label>ขายอะไร<input name="offer" maxlength="120" value="' + attr(seller.offer) + '" required></label>' +
+    '<label>ภาพปกหน้าร้าน<input name="cover" type="file" accept="image/png,image/jpeg,image/webp"></label>' +
+    '<button>บันทึกหน้าร้าน</button></form>' +
+    (imageSource(seller.cover) ? '<img class="seller-cover" src="' + imageSource(seller.cover) + '" alt="ภาพปกหน้าร้าน">' : '') +
+    '<h2 id="shop-hours">เวลาเปิด–ปิด</h2><form data-shop-hours>' +
+    '<label>เปิด<input name="opens" type="time" value="' + attr(seller.opens ?? '') + '"></label>' +
+    '<label>ปิด<input name="closes" type="time" value="' + attr(seller.closes ?? '') + '"></label>' +
+    '<button>บันทึกเวลา</button></form><p>เว้นทั้งสองช่องหากเปิดรับออเดอร์ได้ตลอดวัน</p>' +
+    '<details id="shop-payment" data-panel="shop-qr"><summary>QR รับโอนของร้าน</summary><form data-shop-qr>' +
     '<label>อัปโหลดหรือเปลี่ยน QR<input name="qr" type="file" accept="image/png,image/jpeg,image/webp" required></label>' +
     '<button>บันทึก QR</button></form><p>' + (seller.qr ? 'มี QR รับโอนแล้ว' : 'ร้านเปิดรับเงินสดอยู่') + '</p></details>' +
     '<h2 id="seller-menu">ลงขายอาหาร</h2><form data-listing><label>ชื่อเมนู<input name="name" maxlength="80" required></label>' +
     '<label>รายละเอียด<input name="description" maxlength="200" required></label>' +
     '<label>หมวดอาหาร<select name="category">' + categoryOptions('meals') + '</select></label>' +
     '<label>ราคา (บาท)<input name="price" type="number" min="1" max="9999" required></label>' +
+    '<label>รูปอาหาร<input name="image" type="file" accept="image/png,image/jpeg,image/webp"></label>' +
     '<button>ลงขายเมนู</button></form>' + cards + orderSection;
 }
 
 function sellerOwns(order, id) {
-  return listings().some(item => item.id === order.item && shopId(item) === id);
+  return order.shopId ? order.shopId === id : listings().some(item => item.id === order.item && shopId(item) === id);
 }
 
 function canAccess(order, actor, id) {
@@ -485,15 +646,19 @@ function render() {
   if (currentView === 'buyer') {
     visible = orders.filter(order => order.buyer === buyer);
     view.innerHTML = buyerMenu();
-    get('#menu-search').value = search;
-    filterMenu();
+    const searchInput = get('#menu-search');
+    if (searchInput) {
+      searchInput.value = search;
+      filterMenu();
+    }
+    renderCartBar();
   } else if (currentView === 'seller') {
     visible = orders.filter(order => sellerOwns(order, demoShop ?? seller.id));
     view.innerHTML = sellerMenu(visible);
     if (orderFilter !== 'all') visible = visible.filter(order => orderGroup(order) === orderFilter);
     if (fields) {
       const form = view.querySelector('[data-listing]');
-      for (const [name, value] of fields) form.elements[name].value = value;
+      for (const [name, value] of fields) if (typeof value === 'string') form.elements[name].value = value;
     }
   } else {
     view.innerHTML = '<h1>ภาพรวมแอดมิน</h1><p>ทั้งหมด ' + orders.length +
@@ -525,8 +690,13 @@ get('#view').onchange = event => {
 };
 
 get('#view').onclick = event => {
-  const { next, close, status, toggle, paused, backMenu, shopChoice, categoryChip, orderFilter: selectedStatus } =
-    (event.target.closest('[data-shop-choice], [data-category-chip], [data-order-filter]') ?? event.target).dataset;
+  const target = event.target.closest('button');
+  if (!target) {
+    if (event.target.closest('a[href="#shop-payment"]')) get('#shop-payment').open = true;
+    return;
+  }
+  const { next, close, status, toggle, paused, backMenu, shopChoice, categoryChip,
+    storeTab: selectedTab, openCart, cartAdjust, delta, toggleShop, showFavorites, orderFilter: selectedStatus } = target.dataset;
   const actor = currentView;
   const id = demoShop ?? seller?.id;
   if (categoryChip !== undefined && actor === 'buyer') {
@@ -539,12 +709,50 @@ get('#view').onclick = event => {
     orderFilter = selectedStatus;
     render();
     get('[data-order-filter="' + selectedStatus + '"]').focus({ preventScroll: true });
+  } else if (showFavorites !== undefined && actor === 'buyer') {
+    favoritesOnly = !favoritesOnly;
+    render();
+    get('[data-show-favorites]')?.focus({ preventScroll: true });
+  } else if (selectedTab && actor === 'buyer') {
+    storeTab = selectedTab;
+    render();
   } else if (shopChoice !== undefined && actor === 'buyer') {
     shopFilter = shopChoice;
-    for (const button of get('#view').querySelectorAll('[data-shop-choice]')) {
-      button.setAttribute('aria-pressed', button.dataset.shopChoice === shopChoice);
+    storeTab = 'menu';
+    render();
+    if (target.hasAttribute('data-shop-scroll')) get('#choose-shop')?.scrollIntoView();
+    else window.scrollTo(0, 0);
+  } else if (openCart !== undefined && actor === 'buyer') {
+    const lines = cartLines();
+    if (!lines.length) return;
+    checkout = { item: lines[0].item, lines };
+    render();
+    window.scrollTo(0, 0);
+  } else if (cartAdjust && checkout) {
+    const previous = cart.get(cartAdjust);
+    if (!previous) return;
+    const quantity = delta === '0' ? 0 : previous + Number(delta);
+    if (quantity > 20) return;
+    if (quantity === 0) cart.delete(cartAdjust);
+    else cart.set(cartAdjust, quantity);
+    const fields = new FormData(get('[data-checkout]'));
+    const lines = cartLines();
+    checkout = lines.length ? { item: lines[0].item, lines } : undefined;
+    get('#view').replaceChildren();
+    render();
+    const form = get('[data-checkout]');
+    if (form) {
+      for (const [name, value] of fields) form.elements[name].value = value;
+      refreshPayment(form);
     }
-    filterMenu();
+  } else if (toggleShop !== undefined && actor === 'seller' && !demoShop) {
+    update(catalogKey, data => {
+      const shop = data.shops.find(entry => entry.id === id);
+      if (!shop) return false;
+      shop.closed = !shop.closed;
+      seller = shop;
+      return true;
+    }, 'อัปเดตการรับออเดอร์แล้ว');
   } else if (backMenu !== undefined) {
     checkout = undefined;
     render();
@@ -570,14 +778,45 @@ get('#view').onsubmit = async event => {
   event.preventDefault();
   const actor = currentView;
   const form = event.target;
-  const { item, rate, chat, listing, shopQr, checkout: confirm } = form.dataset;
+  const { item, rate, chat, listing, shopQr, shopSettings, shopHours, checkout: confirm } = form.dataset;
   const formData = new FormData(form);
   const id = demoShop ?? seller?.id;
 
-  if (shopQr !== undefined && actor === 'seller' && !demoShop) {
+  if ((shopSettings !== undefined || shopHours !== undefined) && actor === 'seller' && !demoShop) {
+    const isProfile = shopSettings !== undefined;
+    const changes = isProfile
+      ? { name: formData.get('name').trim(), offer: formData.get('offer').trim() }
+      : { opens: formData.get('opens'), closes: formData.get('closes') };
+    if (isProfile ? !changes.name || !changes.offer :
+        Boolean(changes.opens) !== Boolean(changes.closes) || (changes.opens && changes.opens === changes.closes)) {
+      notice(isProfile ? 'กรุณากรอกชื่อร้านและรายละเอียด' : 'กรุณาเลือกเวลาเปิดและปิดที่ต่างกัน หรือเว้นทั้งสองช่อง');
+      return;
+    }
     event.submitter.disabled = true;
     try {
-      const qr = await readQR(formData.get('qr'));
+      if (isProfile) {
+        const cover = await readImage(formData.get('cover'), true);
+        if (cover) changes.cover = cover;
+      }
+      await update(catalogKey, data => {
+        const shop = data.shops.find(entry => entry.id === id);
+        if (!shop) return false;
+        Object.assign(shop, changes);
+        if (isProfile) {
+          for (const item of data.items.filter(entry => entry.shopId === id)) item.shop = shop.name;
+        }
+        seller = shop;
+        return true;
+      }, isProfile ? 'บันทึกหน้าร้านแล้ว' : 'บันทึกเวลาเปิด–ปิดแล้ว');
+    } catch (error) {
+      notice(error.message);
+    } finally {
+      event.submitter.disabled = false;
+    }
+  } else if (shopQr !== undefined && actor === 'seller' && !demoShop) {
+    event.submitter.disabled = true;
+    try {
+      const qr = await readImage(formData.get('qr'));
       if (!qr) return;
       await update(catalogKey, data => {
         const shop = data.shops.find(entry => entry.id === id);
@@ -601,22 +840,38 @@ get('#view').onsubmit = async event => {
       return;
     }
     event.submitter.disabled = true;
-    update(catalogKey, catalog => {
-      const shop = catalog.shops.find(entry => entry.id === id);
-      if (!shop) return false;
-      catalog.items.push({ id: crypto.randomUUID(), shopId: id, shop: shop.name,
-        name, description, price, category });
-      form.reset();
-      return true;
-    }, 'ลงขายเมนูแล้ว').finally(() => { event.submitter.disabled = false; });
+    try {
+      const image = await readImage(formData.get('image'), true);
+      await update(catalogKey, catalog => {
+        const shop = catalog.shops.find(entry => entry.id === id);
+        if (!shop) return false;
+        catalog.items.push({ id: crypto.randomUUID(), shopId: id, shop: shop.name,
+          name, description, price, category, image });
+        form.reset();
+        return true;
+      }, 'ลงขายเมนูแล้ว');
+    } catch (error) {
+      notice(error.message);
+    } finally {
+      event.submitter.disabled = false;
+    }
   } else if (item && actor === 'buyer') {
     const selected = listings().find(entry => entry.id === item && !entry.paused);
     const quantity = Number(formData.get('quantity'));
     if (!selected || !Number.isInteger(quantity) || quantity < 1 || quantity > 20) return;
-    checkout = { item: selected, quantity };
-    notice('');
-    render();
-    window.scrollTo(0, 0);
+    if (!accepting(shopId(selected))) return;
+    if (cartLines().some(line => shopId(line.item) !== shopId(selected))) {
+      notice('ตะกร้ามีเมนูจากอีกร้าน กรุณาสั่งหรือนำเมนูออกก่อน');
+      return;
+    }
+    const nextQuantity = (cart.get(item) ?? 0) + quantity;
+    if (nextQuantity > 20) {
+      notice('เลือกได้ไม่เกิน 20 ชิ้นต่อเมนู');
+      return;
+    }
+    cart.set(item, nextQuantity);
+    renderCartBar();
+    notice('เพิ่มลงตะกร้าแล้ว');
   } else if (confirm !== undefined && checkout && actor === 'buyer') {
     const payment = formData.get('payment');
     const handoff = formData.get('handoff');
@@ -629,16 +884,32 @@ get('#view').onsubmit = async event => {
     const delivery = { name: customer?.name, house, phase, lane,
       address: customerAddress({ house, phase, lane }), note: formData.get('note').trim() };
     const selection = checkout;
-    checkout = undefined;
-    update(ordersKey, data => {
-      if (payment === 'transfer' && !transferQR(selection.item)) return false;
-      const order = createOrder({ id: crypto.randomUUID(), buyer, item: selection.item.id,
-        quantity: selection.quantity, listings: listings() });
+    event.submitter.disabled = true;
+    await update(ordersKey, data => {
+      const id = shopId(selection.item);
+      if (!accepting(id) || (payment === 'transfer' && !transferQR(selection.item))) return false;
+      const available = listings();
+      const lines = [];
+      for (const { item, quantity } of selection.lines) {
+        const current = available.find(entry => entry.id === item.id);
+        if (!current || current.paused || shopId(current) !== id || current.price !== item.price) return false;
+        lines.push({ item: current.id, name: current.name, quantity, price: current.price });
+      }
+      const first = lines[0];
+      const order = createOrder({ id: crypto.randomUUID(), buyer, item: first.item,
+        quantity: first.quantity, listings: available });
       if (!order) return false;
-      Object.assign(order, { delivery, payment, handoff });
+      Object.assign(order, { shopId: id, lines, total: totalFor(selection.lines), delivery, payment, handoff });
       data.unshift(order);
       return true;
-    }, 'ส่งออเดอร์ทดลองแล้ว ร้านเป็นผู้จัดส่ง');
+    }, () => {
+      cart.clear();
+      checkout = undefined;
+      notice('ส่งออเดอร์ทดลองแล้ว ร้านเป็นผู้จัดส่ง');
+      requestAnimationFrame(() => get('#my-orders')?.scrollIntoView());
+    });
+    event.submitter.disabled = false;
+
   } else if (rate && actor === 'buyer') {
     update(ordersKey, data => {
       const order = data.find(entry => entry.id === rate);

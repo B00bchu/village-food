@@ -15,6 +15,11 @@ const types = {
   'food-noodles.webp': 'image/webp',
   'food-dessert.webp': 'image/webp',
   'food-tea.webp': 'image/webp',
+  'village-art.webp': 'image/webp',
+  'food-pad-thai.webp': 'image/webp',
+  'food-green-curry.webp': 'image/webp',
+  'food-grilled-pork.webp': 'image/webp',
+  'food-coconut-pancakes.webp': 'image/webp',
 };
 const port = Number(process.env.PORT ?? 4173);
 createServer(async (request, response) => {

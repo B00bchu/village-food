@@ -1,6 +1,7 @@
-const cacheName = 'village-food-shell-v11';
+const cacheName = 'village-food-shell-v12';
 const assets = ['./', './index.html', './style.css', './app.mjs', './model.mjs', './app.webmanifest', './icon-192.png', './icon-512.png',
-  './market-hero.webp', './food-rice.webp', './food-noodles.webp', './food-dessert.webp', './food-tea.webp'];
+  './market-hero.webp', './food-rice.webp', './food-noodles.webp', './food-dessert.webp', './food-tea.webp',
+  './village-art.webp', './food-pad-thai.webp', './food-green-curry.webp', './food-grilled-pork.webp', './food-coconut-pancakes.webp'];
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(cacheName).then(cache => cache.addAll(assets)));
 });
