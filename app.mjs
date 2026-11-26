@@ -160,6 +160,7 @@ export async function startMarket(session) {
   get('#app-content').hidden = false;
   get('#launch-status').hidden = true;
   get('#market-accounts').hidden = true;
+  get('#header-login').hidden = true;
   get('#online-account').hidden = false;
   get('[data-page="admin"]').hidden = true;
   if (session.role === 'seller') show(seller ? 'seller' : 'seller-unavailable');

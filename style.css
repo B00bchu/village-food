@@ -202,3 +202,8 @@ body[data-mode=seller] .order-tabs button[aria-pressed=true], body[data-mode=sel
 .identity-providers { display: grid; gap: .5rem; margin-block: .85rem; }
 .identity-providers button:disabled { opacity: .65; cursor: not-allowed; }
 .identity-providers [data-provider-status]:empty { display: none; }
+
+.header-login { display: inline-flex; align-items: center; min-height: 44px; padding: .45rem .8rem; border-radius: .75rem; background: var(--primary); color: white; text-decoration: none; font-weight: 750; white-space: nowrap; }
+#market-accounts { scroll-margin-top: 1rem; }
+#market-accounts .role-grid { margin-top: 0; margin-bottom: .75rem; }
+.facebook-login { background: #1858ab; border-color: #1858ab; color: white; }

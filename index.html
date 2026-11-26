@@ -10,20 +10,21 @@
 <header>
   <div class="header-inner">
     <a class="brand" href="./"><img src="./icon-192.png" width="40" height="40" alt=""><span>ตลาดอาหารหมู่บ้าน</span></a>
+    <a class="header-login" id="header-login" href="#market-accounts">เข้าสู่ระบบ</a>
   </div>
 </header>
 <main>
-  <section id="launch-status">
-    <img class="village-art" src="./village-art.webp" alt="" width="900" height="420">
-    <h1>ตลาดอาหารหมู่บ้านกำลังเตรียมเปิด</h1>
-    <p>สมัครบัญชีหรือเข้าสู่ระบบได้ ส่วนการเปิดร้านและสั่งซื้อจะเปิดเมื่อระบบพร้อม</p>
-  </section>
   <section id="market-accounts" hidden>
     <div data-account-roles class="role-grid" role="group" aria-label="ประเภทบัญชี">
       <button type="button" data-account-role="buyer">สำหรับผู้ซื้อ</button>
       <button type="button" data-account-role="seller">สำหรับแม่ค้า</button>
     </div>
     <h2>เข้าสู่ระบบผู้ซื้อ</h2>
+    <div class="identity-providers" data-identity-providers hidden>
+      <button type="button" class="facebook-login" data-provider="facebook" disabled>เข้าสู่ระบบด้วย Facebook</button>
+      <button type="button" class="secondary" data-provider="google" disabled>เข้าสู่ระบบด้วย Google</button>
+      <p data-provider-status role="status">กำลังตรวจสอบผู้ให้บริการเข้าสู่ระบบ</p>
+    </div>
     <form>
       <fieldset class="account-fields">
         <label>อีเมล<input type="email" name="email" autocomplete="username" maxlength="254" required></label>
@@ -32,17 +33,17 @@
         <button type="button" class="secondary" data-account-mode>สร้างบัญชีใหม่</button>
       </fieldset>
     </form>
-    <div class="identity-providers" data-identity-providers hidden>
-      <button type="button" class="secondary" data-provider="google" disabled>เข้าสู่ระบบด้วย Google</button>
-      <button type="button" class="secondary" data-provider="facebook" disabled>เข้าสู่ระบบด้วย Facebook</button>
-      <p data-provider-status role="status">กำลังตรวจสอบผู้ให้บริการเข้าสู่ระบบ</p>
-    </div>
     <div data-signed-in hidden>
       <p>เข้าสู่ระบบแล้ว <strong></strong></p>
       <button type="button" data-enter-market>เข้าสู่ตลาด</button>
       <button type="button" class="secondary" data-sign-out>ออกจากระบบ</button>
     </div>
     <p role="status" data-account-status></p>
+  </section>
+  <section id="launch-status">
+    <img class="village-art" src="./village-art.webp" alt="" width="900" height="420">
+    <h1>ตลาดอาหารหมู่บ้านกำลังเตรียมเปิด</h1>
+    <p>สมัครบัญชีหรือเข้าสู่ระบบได้ ส่วนการเปิดร้านและสั่งซื้อจะเปิดเมื่อระบบพร้อม</p>
   </section>
   <div id="app-content" hidden>
   <div id="online-account" hidden>
@@ -93,11 +94,17 @@
 </main>
 <script type="module">
   if (['localhost', '127.0.0.1', '[::1]'].includes(location.hostname)) {
+    document.querySelector('#header-login').hidden = true;
     await import('./app.mjs');
     document.querySelector('#app-content').hidden = false;
     document.querySelector('#launch-status').hidden = true;
   } else {
-    await import('./account.mjs');
+    try {
+      await import('./account.mjs?v=18');
+    } catch {
+      document.querySelector('#launch-status p').textContent =
+        'โหลดหน้าเข้าสู่ระบบไม่ได้ กรุณารีเฟรชหน้าเว็บแล้วลองอีกครั้ง';
+    }
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('./sw.js').catch(error => console.warn('Service worker registration failed', error));
     }
