@@ -35,7 +35,7 @@ function orderCard(order) {
       'จุดส่ง ' + escapeText(order.delivery.address) +
       (order.delivery.note ? '<br>หมายเหตุ ' + escapeText(order.delivery.note) : '') + '</p>' : '';
   return '<article><h3>' + escapeText(item.name) + ' × ' + order.quantity + '</h3><p>' + escapeText(item.shop) +
-    ' · โซน' + order.zone + ' · ฿' + order.total + '</p><p>' + (order.closed ?? statuses[order.status]) +
+    ' · ฿' + order.total + '</p><p>' + (order.closed ?? statuses[order.status]) +
     '</p>' + delivery + (order.payment ? '<p>ชำระ ' + paymentLabels[order.payment] +
       ' · รับอาหาร ' + handoffLabels[order.handoff] + '</p>' : '') + score + next + close + rate + '<details data-panel="history-' + order.id +
     '"><summary>ประวัติสถานะ</summary><ol>' + history + '</ol></details>' + chat + '</article>';
@@ -58,7 +58,6 @@ localStorage.setItem(guestKey, buyer);
 let orders = read(ordersKey, []);
 let catalog = readCatalog();
 let currentView = 'home';
-let zone = 'เหนือ';
 let search = '';
 let shopFilter = '';
 let categoryFilter = '';
@@ -126,7 +125,6 @@ get('main').addEventListener('click', event => {
       const form = get('#request');
       form.elements.name.value = seller.name;
       form.elements.phone.value = seller.phone;
-      form.elements.zone.value = seller.zone;
     }
   } else if (view === 'buyer') {
     customer = read(customerKey, null);
@@ -196,7 +194,7 @@ get('#request').onsubmit = async event => {
     const qr = await readQR(data.get('qr'));
     if (currentView !== 'registration') return;
     const code = String(crypto.getRandomValues(new Uint32Array(1))[0] % 1000000).padStart(6, '0');
-    challenge = { name, offer, qr, phone: data.get('phone'), zone: data.get('zone'), code,
+    challenge = { name, offer, qr, phone: data.get('phone'), code,
       expires: Date.now() + 120000, remaining: 5 };
     get('#verify').reset();
     get('#verify').hidden = false;
@@ -220,12 +218,12 @@ get('#verify').onsubmit = event => {
     notice('รหัสไม่ตรง เหลือ ' + challenge.remaining + ' ครั้ง');
     return;
   }
-  const { name, phone, zone, offer, qr } = challenge;
+  const { name, phone, offer, qr } = challenge;
   challenge = undefined;
   update(catalogKey, data => {
     seller = data.shops.find(shop => shop.phone === phone);
     if (!seller) {
-      seller = { id: crypto.randomUUID(), name, phone, zone, offer, qr };
+      seller = { id: crypto.randomUUID(), name, phone, offer, qr };
       data.shops.push(seller);
     } else {
       seller.offer = offer;
@@ -259,14 +257,13 @@ function itemCategory(item) {
 }
 
 function buyerMenu() {
-  const zoneOptions = ['เหนือ', 'ใต้'].map(name =>
-    '<option' + (name === zone ? ' selected' : '') + '>' + name + '</option>').join('');
-  const available = listings().filter(item => item.zone === zone && !item.paused);
+  const available = listings().filter(item => !item.paused);
   const shops = new Map(available.map(item => [shopId(item), item.shop]));
   if (!shops.has(shopFilter)) shopFilter = '';
-  const shopOptions = [...shops].map(([id, name]) =>
-    '<option value="' + escapeText(id).replaceAll('"', '&quot;') + '"' +
-    (id === shopFilter ? ' selected' : '') + '>' + escapeText(name) + '</option>').join('');
+  const shopButtons = [['', 'ทุกร้าน'], ...shops].map(([id, name]) =>
+    '<button type="button" class="secondary" data-shop-choice="' +
+    escapeText(id).replaceAll('"', '&quot;') + '" aria-pressed="' + (id === shopFilter) + '">' +
+    escapeText(name) + '</button>').join('');
   const cards = available.map(item =>
     '<article class="food-card"><div class="food-heading"><h3>' + escapeText(item.name) +
     '</h3><strong class="price">฿' + item.price + '</strong></div><p class="shop-name">' +
@@ -282,12 +279,11 @@ function buyerMenu() {
   const heading = customer ? 'สั่งอาหารใกล้บ้าน' : 'สั่งแทน';
   return '<div class="market-heading"><h1>' + heading + '</h1>' + profile + '</div>' +
     '<div class="market-filters"><label>ค้นหาอาหารหรือร้าน<input id="menu-search" type="search" placeholder="เช่น ข้าวกะเพรา"></label>' +
-    '<label>โซนจัดส่ง<select id="zone">' + zoneOptions + '</select></label>' +
-    '<label>เลือกร้าน<select id="shop-filter"><option value="">ทุกร้าน</option>' + shopOptions + '</select></label>' +
     '<label>หมวดอาหาร<select id="category-filter"><option value="">ทุกหมวด</option>' +
     categoryOptions(categoryFilter) + '</select></label></div>' +
-    '<h2>เมนูในโซน' + zone + '</h2><div class="food-grid">' + cards +
-    '</div><p id="menu-empty" hidden>ไม่พบเมนู ลองเปลี่ยนคำค้น ร้าน หมวดอาหาร หรือโซนจัดส่ง</p>' +
+    '<h2 id="choose-shop">เลือกร้าน</h2><div class="shop-picker" role="group" aria-labelledby="choose-shop">' +
+    shopButtons + '</div><h2>เมนูอาหาร</h2><div class="food-grid">' + cards +
+    '</div><p id="menu-empty" hidden>ไม่พบเมนู ลองเปลี่ยนคำค้น ร้าน หรือหมวดอาหาร</p>' +
     '<h2>ติดตามออเดอร์ของฉัน</h2>';
 }
 
@@ -340,7 +336,7 @@ function checkoutForm() {
       '<label>เฟส<input name="phase" maxlength="30" required></label>' +
       '<label>ซอย<input name="lane" maxlength="30" required></label></fieldset>';
   return '<div class="checkout-summary"><h1>ตรวจสอบและยืนยันออเดอร์</h1><p>' + escapeText(item.name) + ' × ' +
-    quantity + ' · ร้าน ' + escapeText(item.shop) + ' · โซน' + item.zone +
+    quantity + ' · ร้าน ' + escapeText(item.shop) +
     '</p><p><strong>ยอดรวม ฿' + item.price * quantity + '</strong> · ส่งฟรีในรอบทดลอง</p></div>' +
     '<form data-checkout>' + address + '<fieldset><legend>วิธีชำระเงิน</legend>' +
     '<label><input type="radio" name="payment" value="cash" checked>เงินสด</label>' +
@@ -367,7 +363,7 @@ function sellerMenu() {
     demoOptions + '</select></label>';
   if (demoShop) return '<h1>ร้านทดลอง ' + demoShop + '</h1>' + selector + '<h2>ออเดอร์ร้านค้า</h2>';
   return '<h1>ร้าน ' + escapeText(seller.name) + '</h1><p>' + escapeText(seller.offer) +
-    ' · จัดส่งโซน' + seller.zone + '</p>' + selector +
+    '</p>' + selector +
     '<details data-panel="shop-qr"><summary>QR รับโอนของร้าน</summary><form data-shop-qr>' +
     '<label>อัปโหลดหรือเปลี่ยน QR<input name="qr" type="file" accept="image/png,image/jpeg,image/webp" required></label>' +
     '<button>บันทึก QR</button></form><p>' + (seller.qr ? 'มี QR รับโอนแล้ว' : 'ร้านเปิดรับเงินสดอยู่') + '</p></details>' +
@@ -433,12 +429,6 @@ get('#view').oninput = event => {
 get('#view').onchange = event => {
   if (event.target.name === 'payment' && checkout) {
     refreshPayment(event.target.form);
-  } else if (event.target.id === 'zone') {
-    zone = event.target.value;
-    render();
-  } else if (event.target.id === 'shop-filter') {
-    shopFilter = event.target.value;
-    filterMenu();
   } else if (event.target.id === 'category-filter') {
     categoryFilter = event.target.value;
     filterMenu();
@@ -450,10 +440,16 @@ get('#view').onchange = event => {
 };
 
 get('#view').onclick = event => {
-  const { next, close, status, toggle, paused, backMenu } = event.target.dataset;
+  const { next, close, status, toggle, paused, backMenu, shopChoice } = event.target.dataset;
   const actor = currentView;
   const id = demoShop ?? seller?.id;
-  if (backMenu !== undefined) {
+  if (shopChoice !== undefined && actor === 'buyer') {
+    shopFilter = shopChoice;
+    for (const button of get('#view').querySelectorAll('[data-shop-choice]')) {
+      button.setAttribute('aria-pressed', button.dataset.shopChoice === shopChoice);
+    }
+    filterMenu();
+  } else if (backMenu !== undefined) {
     checkout = undefined;
     render();
     notice('');
@@ -513,12 +509,12 @@ get('#view').onsubmit = async event => {
       const shop = catalog.shops.find(entry => entry.id === id);
       if (!shop) return false;
       catalog.items.push({ id: crypto.randomUUID(), shopId: id, shop: shop.name,
-        zone: shop.zone, name, description, price, category });
+        name, description, price, category });
       form.reset();
       return true;
     }, 'ลงขายเมนูแล้ว').finally(() => { event.submitter.disabled = false; });
   } else if (item && actor === 'buyer') {
-    const selected = listings().find(entry => entry.id === item && entry.zone === zone && !entry.paused);
+    const selected = listings().find(entry => entry.id === item && !entry.paused);
     const quantity = Number(formData.get('quantity'));
     if (!selected || !Number.isInteger(quantity) || quantity < 1 || quantity > 20) return;
     checkout = { item: selected, quantity };
@@ -540,7 +536,7 @@ get('#view').onsubmit = async event => {
     update(ordersKey, data => {
       if (payment === 'transfer' && !transferQR(selection.item)) return false;
       const order = createOrder({ id: crypto.randomUUID(), buyer, item: selection.item.id,
-        zone: selection.item.zone, quantity: selection.quantity, listings: listings() });
+        quantity: selection.quantity, listings: listings() });
       if (!order) return false;
       Object.assign(order, { delivery, payment, handoff });
       data.unshift(order);

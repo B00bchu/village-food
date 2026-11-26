@@ -9,29 +9,29 @@ export const categories = {
 };
 
 export const menu = [
-  { id: 'rice', shop: 'ครัวหน้าซอย', name: 'ข้าวกะเพราไก่ไข่ดาว', zone: 'เหนือ', price: 60, category: 'meals' },
-  { id: 'soup', shop: 'ครัวหน้าซอย', name: 'ต้มจืดเต้าหู้หมูสับ', zone: 'เหนือ', price: 55, category: 'sides' },
-  { id: 'garlic-chicken', shop: 'ครัวหน้าซอย', name: 'ข้าวไก่กระเทียม', zone: 'เหนือ', price: 55, category: 'meals' },
-  { id: 'pad-thai', shop: 'ผัดไทยเตาถ่าน', name: 'ผัดไทยกุ้งสด', zone: 'เหนือ', price: 70, category: 'noodles' },
-  { id: 'fried-tofu', shop: 'ผัดไทยเตาถ่าน', name: 'เต้าหู้ทอด', zone: 'เหนือ', price: 35, category: 'snacks' },
-  { id: 'green-curry', shop: 'แกงบ้านยาย', name: 'แกงเขียวหวานไก่', zone: 'เหนือ', price: 65, category: 'sides' },
-  { id: 'mango-rice', shop: 'หวานละมุน', name: 'ข้าวเหนียวมะม่วง', zone: 'เหนือ', price: 55, category: 'desserts' },
-  { id: 'thai-tea', shop: 'หวานละมุน', name: 'ชาไทยเย็น', zone: 'เหนือ', price: 35, category: 'drinks' },
-  { id: 'noodles', shop: 'ก๋วยเตี๋ยวบ้านสวน', name: 'ก๋วยเตี๋ยวหมูน้ำใส', zone: 'ใต้', price: 50, category: 'noodles' },
-  { id: 'tom-yum-noodles', shop: 'ก๋วยเตี๋ยวบ้านสวน', name: 'ก๋วยเตี๋ยวต้มยำ', zone: 'ใต้', price: 60, category: 'noodles' },
-  { id: 'grilled-pork', shop: 'เตาปิ้งท้ายหมู่บ้าน', name: 'หมูปิ้งชุดเล็ก', zone: 'ใต้', price: 45, category: 'snacks' },
-  { id: 'grilled-chicken', shop: 'เตาปิ้งท้ายหมู่บ้าน', name: 'ข้าวไก่ย่าง', zone: 'ใต้', price: 60, category: 'meals' },
-  { id: 'massaman', shop: 'ครัวบ้านร่มไม้', name: 'มัสมั่นไก่', zone: 'ใต้', price: 70, category: 'sides' },
-  { id: 'shrimp-rice', shop: 'ครัวบ้านร่มไม้', name: 'ข้าวผัดกุ้ง', zone: 'ใต้', price: 65, category: 'meals' },
-  { id: 'coconut-pancakes', shop: 'ขนมหน้าสวน', name: 'ขนมครก', zone: 'ใต้', price: 35, category: 'desserts' },
-  { id: 'lime-tea', shop: 'ขนมหน้าสวน', name: 'ชามะนาว', zone: 'ใต้', price: 35, category: 'drinks' },
+  { id: 'rice', shop: 'ครัวหน้าซอย', name: 'ข้าวกะเพราไก่ไข่ดาว', price: 60, category: 'meals' },
+  { id: 'soup', shop: 'ครัวหน้าซอย', name: 'ต้มจืดเต้าหู้หมูสับ', price: 55, category: 'sides' },
+  { id: 'garlic-chicken', shop: 'ครัวหน้าซอย', name: 'ข้าวไก่กระเทียม', price: 55, category: 'meals' },
+  { id: 'pad-thai', shop: 'ผัดไทยเตาถ่าน', name: 'ผัดไทยกุ้งสด', price: 70, category: 'noodles' },
+  { id: 'fried-tofu', shop: 'ผัดไทยเตาถ่าน', name: 'เต้าหู้ทอด', price: 35, category: 'snacks' },
+  { id: 'green-curry', shop: 'แกงบ้านยาย', name: 'แกงเขียวหวานไก่', price: 65, category: 'sides' },
+  { id: 'mango-rice', shop: 'หวานละมุน', name: 'ข้าวเหนียวมะม่วง', price: 55, category: 'desserts' },
+  { id: 'thai-tea', shop: 'หวานละมุน', name: 'ชาไทยเย็น', price: 35, category: 'drinks' },
+  { id: 'noodles', shop: 'ก๋วยเตี๋ยวบ้านสวน', name: 'ก๋วยเตี๋ยวหมูน้ำใส', price: 50, category: 'noodles' },
+  { id: 'tom-yum-noodles', shop: 'ก๋วยเตี๋ยวบ้านสวน', name: 'ก๋วยเตี๋ยวต้มยำ', price: 60, category: 'noodles' },
+  { id: 'grilled-pork', shop: 'เตาปิ้งท้ายหมู่บ้าน', name: 'หมูปิ้งชุดเล็ก', price: 45, category: 'snacks' },
+  { id: 'grilled-chicken', shop: 'เตาปิ้งท้ายหมู่บ้าน', name: 'ข้าวไก่ย่าง', price: 60, category: 'meals' },
+  { id: 'massaman', shop: 'ครัวบ้านร่มไม้', name: 'มัสมั่นไก่', price: 70, category: 'sides' },
+  { id: 'shrimp-rice', shop: 'ครัวบ้านร่มไม้', name: 'ข้าวผัดกุ้ง', price: 65, category: 'meals' },
+  { id: 'coconut-pancakes', shop: 'ขนมหน้าสวน', name: 'ขนมครก', price: 35, category: 'desserts' },
+  { id: 'lime-tea', shop: 'ขนมหน้าสวน', name: 'ชามะนาว', price: 35, category: 'drinks' },
 ];
 export const statuses = ['รอร้านรับ', 'กำลังทำ', 'กำลังจัดส่ง', 'ส่งแล้ว'];
 
-export function createOrder({ id, buyer, item, quantity, zone, listings = menu }) {
-  const listing = listings.find(entry => entry.id === item && entry.zone === zone);
+export function createOrder({ id, buyer, item, quantity, listings = menu }) {
+  const listing = listings.find(entry => entry.id === item);
   if (!listing || listing.paused || !Number.isInteger(quantity) || quantity < 1 || quantity > 20) return null;
-  return { id, buyer, item, quantity, zone, total: listing.price * quantity, status: 0, history: [{ label: statuses[0], at: Date.now() }] };
+  return { id, buyer, item, quantity, total: listing.price * quantity, status: 0, history: [{ label: statuses[0], at: Date.now() }] };
 }
 
 export function recordStatus(order, label) {

@@ -64,3 +64,5 @@ form fieldset label { display: inline-flex; align-items: center; gap: .4rem; mar
 [data-checkout] input:not([type="radio"]) { width: min(100%, 16rem); }
 input[type="radio"] { min-height: auto; accent-color: var(--plum); }
 .payment-qr { display: block; width: min(100%, 14rem); height: auto; margin-block: .5rem; }
+.shop-picker { display: flex; flex-wrap: wrap; gap: .5rem; }
+.shop-picker button[aria-pressed="true"] { background: var(--plum); color: white; }
