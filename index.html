@@ -15,6 +15,7 @@
       <button data-page="buyer"><strong>ลูกค้า</strong><span>เลือกอาหาร สั่งซื้อ และติดตามออเดอร์</span></button>
       <button data-page="seller"><strong>แม่ค้า</strong><span>ลงทะเบียนร้าน ลงขาย และรับออเดอร์</span></button>
     </div>
+    <button data-page="guest" class="secondary">สั่งแทน (ไม่ต้องลงทะเบียน)</button>
     <button data-page="admin" class="secondary">ภาพรวมแอดมินทดลอง</button>
   </section>
   <nav id="back" hidden><button data-page="home" class="secondary">กลับหน้าแรก</button></nav>
@@ -27,6 +28,7 @@
       <label>เฟส<input name="phase" maxlength="30" required></label>
       <label>ซอย<input name="lane" maxlength="30" required></label>
       <button>บันทึกและเลือกอาหาร</button>
+      <button type="button" data-page="guest" class="secondary">สั่งแทนโดยไม่ลงทะเบียน</button>
     </form>
   </section>
   <section id="auth" hidden>

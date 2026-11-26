@@ -31,7 +31,8 @@ function orderCard(order) {
       '</select></label><button>ส่งคะแนน</button></form>' : '';
   const score = order.score ? '<p>รีวิว ' + order.score + '/5</p>' : '';
   const delivery = order.delivery && currentView !== 'admin'
-    ? '<p>ผู้รับ ' + escapeText(order.delivery.name) + ' · จุดส่ง ' + escapeText(order.delivery.address) +
+    ? '<p>' + (order.delivery.name ? 'ผู้รับ ' + escapeText(order.delivery.name) + ' · ' : '') +
+      'จุดส่ง ' + escapeText(order.delivery.address) +
       (order.delivery.note ? '<br>หมายเหตุ ' + escapeText(order.delivery.note) : '') + '</p>' : '';
   return '<article><h3>' + escapeText(item.name) + ' × ' + order.quantity + '</h3><p>' + escapeText(item.shop) +
     ' · โซน' + order.zone + ' · ฿' + order.total + '</p><p>' + (order.closed ?? statuses[order.status]) +
@@ -124,6 +125,9 @@ get('main').addEventListener('click', event => {
   } else if (view === 'buyer') {
     customer = read(customerKey, null);
     show(customer ? 'buyer' : 'customer-registration');
+  } else if (view === 'guest') {
+    customer = null;
+    show('buyer');
   } else if (view === 'edit-customer') {
     show('customer-registration');
     const form = get('#customer-form');
@@ -136,8 +140,7 @@ get('main').addEventListener('click', event => {
 get('#customer-form').onsubmit = event => {
   event.preventDefault();
   const data = new FormData(event.target);
-  const profile = Object.fromEntries(['name', 'house', 'phase', 'lane'].map(key =>
-    [key, data.get(key).trim()]));
+  const profile = { name: data.get('name').trim(), ...readAddress(data) };
   if (Object.values(profile).some(value => !value)) {
     notice('กรุณากรอกชื่อ บ้านเลขที่ เฟส และซอยให้ครบ');
     return;
@@ -249,9 +252,18 @@ function buyerMenu() {
     '<p>' + rating(shopId(item)) + '</p><form data-item="' + item.id +
     '"><label>จำนวน<input name="quantity" type="number" min="1" max="20" value="1" required></label>' +
     '<button>ตรวจสอบออเดอร์</button></form></article>').join('');
-  return '<h1>สั่งอาหารใกล้บ้าน</h1><p>จัดส่งให้ ' + escapeText(customer.name) + ' · ' +
-    escapeText(customerAddress(customer)) + '</p><button class="secondary" data-page="edit-customer">แก้ไขที่อยู่</button> <label>โซนจัดส่ง<select id="zone">' + zoneOptions +
+  const profile = customer
+    ? '<p>จัดส่งให้ ' + escapeText(customer.name) + ' · ' + escapeText(customerAddress(customer)) +
+      '</p><button class="secondary" data-page="edit-customer">แก้ไขที่อยู่</button> ' +
+      '<button class="secondary" data-page="guest">สั่งแทน</button> '
+    : '<p>กรอกที่อยู่ของผู้รับตอนยืนยันออเดอร์</p>';
+  const heading = customer ? 'สั่งอาหารใกล้บ้าน' : 'สั่งแทน';
+  return '<h1>' + heading + '</h1>' + profile + '<label>โซนจัดส่ง<select id="zone">' + zoneOptions +
     '</select></label>' + cards + '<h2>ติดตามออเดอร์ของฉัน</h2>';
+}
+
+function readAddress(data) {
+  return Object.fromEntries(['house', 'phase', 'lane'].map(key => [key, data.get(key).trim()]));
 }
 
 function customerAddress(profile) {
@@ -277,11 +289,16 @@ function refreshPayment(form) {
 
 function checkoutForm() {
   const { item, quantity } = checkout;
+  const address = customer
+    ? '<p>จัดส่งให้ ' + escapeText(customer.name) + ' · ' + escapeText(customerAddress(customer)) + '</p>'
+    : '<fieldset><legend>ที่อยู่ของผู้รับ</legend>' +
+      '<label>บ้านเลขที่<input name="house" maxlength="30" required></label>' +
+      '<label>เฟส<input name="phase" maxlength="30" required></label>' +
+      '<label>ซอย<input name="lane" maxlength="30" required></label></fieldset>';
   return '<h1>ตรวจสอบและยืนยันออเดอร์</h1><p>' + escapeText(item.name) + ' × ' +
     quantity + ' · ร้าน ' + escapeText(item.shop) + ' · โซน' + item.zone +
     '</p><p>ยอดรวม ฿' + item.price * quantity + ' · ส่งฟรีในรอบทดลอง</p>' +
-    '<p>จัดส่งให้ ' + escapeText(customer.name) + ' · ' + escapeText(customerAddress(customer)) + '</p>' +
-    '<form data-checkout><fieldset><legend>วิธีชำระเงิน</legend>' +
+    '<form data-checkout>' + address + '<fieldset><legend>วิธีชำระเงิน</legend>' +
     '<label><input type="radio" name="payment" value="cash" checked>เงินสด</label>' +
     '<label><input type="radio" name="payment" value="transfer">โอน / สแกน QR</label>' +
     '<p data-cash-only hidden>ร้านนี้รับเงินสดในรอบทดลอง</p>' +
@@ -450,9 +467,13 @@ get('#view').onsubmit = async event => {
     const payment = formData.get('payment');
     const handoff = formData.get('handoff');
     if (!Object.hasOwn(paymentLabels, payment) || !Object.hasOwn(handoffLabels, handoff)) return;
-    const delivery = { name: customer.name, address: customerAddress(customer),
-      house: customer.house, phase: customer.phase, lane: customer.lane,
-      note: formData.get('note').trim() };
+    const { house, phase, lane } = customer ?? readAddress(formData);
+    if (!house || !phase || !lane) {
+      notice('กรุณากรอกบ้านเลขที่ เฟส และซอยของผู้รับให้ครบ');
+      return;
+    }
+    const delivery = { name: customer?.name, house, phase, lane,
+      address: customerAddress({ house, phase, lane }), note: formData.get('note').trim() };
     const selection = checkout;
     checkout = undefined;
     update(ordersKey, data => {
