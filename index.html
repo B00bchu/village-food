@@ -10,10 +10,15 @@
 <header>
   <div class="header-inner">
     <a class="brand" href="./"><img src="./icon-192.png" width="40" height="40" alt=""><span>ตลาดอาหารหมู่บ้าน</span></a>
-    <span class="header-label">ตลาดทดลอง</span>
   </div>
 </header>
 <main>
+  <section id="launch-status">
+    <img class="village-art" src="./village-art.webp" alt="" width="900" height="420">
+    <h1>ตลาดอาหารหมู่บ้านกำลังเตรียมเปิด</h1>
+    <p>ขณะนี้ยังปิดรับคำสั่งซื้อและลงทะเบียนร้านค้า</p>
+  </section>
+  <div id="app-content" hidden>
   <section id="home">
     <div class="welcome">
       <img class="village-art" src="./village-art.webp" alt="" width="900" height="420">
@@ -44,24 +49,21 @@
       <button type="button" data-page="guest" class="secondary">สั่งแทนโดยไม่ลงทะเบียน</button>
     </form>
   </section>
-  <section id="auth" hidden>
-    <h1>ลงทะเบียนแม่ค้า</h1>
-    <p>ใช้เบอร์สมมติ รหัส OTP ทดลองจะแสดงในหน้านี้</p>
-    <form id="request">
-      <label>ชื่อแม่ค้าหรือชื่อร้าน<input name="name" maxlength="60" required></label>
-      <label>ขายอะไร<input name="offer" maxlength="120" required></label>
-      <label>เบอร์โทรสมมติ<input name="phone" type="tel" inputmode="numeric" pattern="0[0-9]{9}" placeholder="0800000000" required></label>
-      <label>QR รับโอน (ถ้ามี)<input name="qr" type="file" accept="image/png,image/jpeg,image/webp" aria-describedby="qr-help"></label>
-      <button>ขอ OTP ทดลอง</button>
-    </form>
-    <p id="qr-help">ใช้ภาพ QR สำหรับทดลอง ขนาดไม่เกิน 512 KB ร้านที่ยังไม่ใส่ QR รับเงินสดได้</p>
-    <form id="verify" hidden>
-      <label>OTP<input name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" required></label>
-      <button>ยืนยันและเปิดร้าน</button>
-    </form>
+  <section id="seller-unavailable" hidden>
+    <h1>ยังไม่เปิดลงทะเบียนร้านค้า</h1>
+    <p>การลงทะเบียนจะเปิดเมื่อระบบบัญชีร้านค้าพร้อมใช้งาน</p>
   </section>
   <section id="view" hidden></section>
   <p id="notice" role="status"></p>
+  </div>
 </main>
-<script type="module" src="./app.mjs"></script>
+<script type="module">
+  if (['localhost', '127.0.0.1', '[::1]'].includes(location.hostname)) {
+    await import('./app.mjs');
+    document.querySelector('#app-content').hidden = false;
+    document.querySelector('#launch-status').hidden = true;
+  } else if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('./sw.js').catch(error => console.warn('Service worker registration failed', error));
+  }
+</script>
 </html>

@@ -187,3 +187,11 @@ body[data-mode=seller] .order-tabs button[aria-pressed=true], body[data-mode=sel
 .store-item p { font-size: .78rem; color: var(--muted); margin: .15rem 0 0; }
 .store-item button { width: 44px; height: 44px; padding: 0; border-radius: 100%; font-size: 1.35rem; }
 .store-item button:disabled { background: #e9ece8; color: #60685f; border-color: #e9ece8; }
+.checkout-shop { flex: 1 0 100%; padding: .85rem; }
+.checkout-shop-title, .checkout-shop .cart-lines li { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: .5rem; }
+.checkout-shop-title h2 { margin: 0; }
+.checkout-shop .cart-lines { list-style: none; padding: 0; }
+.checkout-shop .cart-lines li { padding-block: .35rem; border-top: 1px solid var(--line); }
+.checkout-shop [data-qr-panel] { margin-top: .5rem; padding: .65rem; background: var(--mint); border-radius: .65rem; }
+#launch-status { max-width: 40rem; margin: 2rem auto; text-align: center; border: 0; }
+#launch-status h1 { margin-top: 1rem; }
