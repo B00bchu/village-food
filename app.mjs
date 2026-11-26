@@ -93,10 +93,10 @@ async function update(key, mutate, success) {
   }
 }
 
-function show(view) {
+function show(view, selectedShop = '') {
   currentView = view;
   search = '';
-  shopFilter = '';
+  shopFilter = selectedShop;
   categoryFilter = '';
   checkout = undefined;
   demoShop = undefined;
@@ -116,7 +116,8 @@ function show(view) {
 }
 
 get('main').addEventListener('click', event => {
-  const view = event.target.closest('[data-page]')?.dataset.page;
+  const action = event.target.closest('[data-page]');
+  const view = action?.dataset.page;
   if (view === 'seller') {
     catalog = readCatalog();
     seller = catalog.shops.find(shop => shop.id === localStorage.getItem(sellerKey));
@@ -128,7 +129,7 @@ get('main').addEventListener('click', event => {
     }
   } else if (view === 'buyer') {
     customer = read(customerKey, null);
-    show(customer ? 'buyer' : 'customer-registration');
+    show(customer ? 'buyer' : 'customer-registration', action.dataset.homeShop ?? '');
   } else if (view === 'guest') {
     customer = null;
     show('buyer');
@@ -152,7 +153,7 @@ get('#customer-form').onsubmit = event => {
   try {
     localStorage.setItem(customerKey, JSON.stringify(profile));
     customer = profile;
-    show('buyer');
+    show('buyer', shopFilter);
   } catch {
     notice('บันทึกข้อมูลลูกค้าไม่ได้ กรุณาลองอีกครั้ง');
   }
@@ -256,35 +257,67 @@ function itemCategory(item) {
   return Object.hasOwn(categories, item.category) ? item.category : 'other';
 }
 
+const menuPhotos = { rice: 'rice', noodles: 'noodles', 'mango-rice': 'dessert', 'thai-tea': 'tea' };
+
+function openShops(items) {
+  const shops = new Map();
+  for (const item of items) {
+    const id = shopId(item);
+    if (!shops.has(id)) shops.set(id, { name: item.shop, count: 0 });
+    shops.get(id).count += 1;
+  }
+  return shops;
+}
+
+function shopCards(shops, home = false) {
+  return [...shops].map(([id, shop]) => {
+    const value = escapeText(id).replaceAll('"', '&quot;');
+    const action = home ? 'data-page="buyer" data-home-shop="' + value + '"'
+      : 'data-shop-choice="' + value + '" aria-pressed="' + (id === shopFilter) + '"';
+    return '<button type="button" class="shop-card" ' + action + '><span class="shop-mark" aria-hidden="true">' +
+      escapeText(shop.name.match(/^[เแโใไ]([ก-ฮ])/)?.[1] ?? [...shop.name][0] ?? '•') + '</span><span><strong>' + escapeText(shop.name) +
+      '</strong><small>' + shop.count + ' เมนู</small></span></button>';
+  }).join('');
+}
+
+function renderHome() {
+  const shops = openShops(listings().filter(item => !item.paused));
+  get('#home-shops').innerHTML = shopCards(shops, true);
+}
+
 function buyerMenu() {
   const available = listings().filter(item => !item.paused);
-  const shops = new Map(available.map(item => [shopId(item), item.shop]));
+  const shops = openShops(available);
   if (!shops.has(shopFilter)) shopFilter = '';
-  const shopButtons = [['', 'ทุกร้าน'], ...shops].map(([id, name]) =>
-    '<button type="button" class="secondary" data-shop-choice="' +
-    escapeText(id).replaceAll('"', '&quot;') + '" aria-pressed="' + (id === shopFilter) + '">' +
-    escapeText(name) + '</button>').join('');
-  const cards = available.map(item =>
-    '<article class="food-card"><div class="food-heading"><h3>' + escapeText(item.name) +
-    '</h3><strong class="price">฿' + item.price + '</strong></div><p class="shop-name">' +
-    escapeText(item.shop) + ' · ' + categories[itemCategory(item)] + '</p>' + (item.description ? '<p>' + escapeText(item.description) + '</p>' : '') +
-    '<p class="rating">' + rating(shopId(item)) + '</p><form data-item="' + item.id +
-    '"><label>จำนวน<input name="quantity" type="number" min="1" max="20" value="1" required></label>' +
-    '<button>ตรวจสอบออเดอร์</button></form></article>').join('');
+  const shopButtons = '<button type="button" class="shop-card all-shops" data-shop-choice="" aria-pressed="' +
+    (shopFilter === '') + '">ทุกร้าน</button>' + shopCards(shops);
+  const cards = available.map(item => {
+    const photo = menuPhotos[item.id];
+    return '<article class="food-card">' +
+      (photo ? '<img class="food-photo" src="./food-' + photo + '.webp" alt="" loading="lazy" width="480" height="360">' : '') +
+      '<div class="food-content"><div class="food-heading"><h3>' + escapeText(item.name) +
+      '</h3><strong class="price">฿' + item.price + '</strong></div><p class="shop-name">' +
+      escapeText(item.shop) + ' · ' + categories[itemCategory(item)] + '</p>' +
+      (item.description ? '<p>' + escapeText(item.description) + '</p>' : '') +
+      '<p class="rating">' + rating(shopId(item)) + '</p><form data-item="' + item.id +
+      '"><label>จำนวน<input name="quantity" type="number" min="1" max="20" value="1" required></label>' +
+      '<button>ตรวจสอบออเดอร์</button></form></div></article>';
+  }).join('');
   const profile = customer
     ? '<p>จัดส่งให้ ' + escapeText(customer.name) + ' · ' + escapeText(customerAddress(customer)) +
       '</p><button class="secondary" data-page="edit-customer">แก้ไขที่อยู่</button> ' +
       '<button class="secondary" data-page="guest">สั่งแทน</button> '
     : '<p>กรอกที่อยู่ของผู้รับตอนยืนยันออเดอร์</p>';
   const heading = customer ? 'สั่งอาหารใกล้บ้าน' : 'สั่งแทน';
-  return '<div class="market-heading"><h1>' + heading + '</h1>' + profile + '</div>' +
+  return '<div class="market-heading"><div><h1>' + heading + '</h1>' + profile +
+    '</div><a href="#my-orders">ดูออเดอร์ของฉัน ↓</a></div>' +
     '<div class="market-filters"><label>ค้นหาอาหารหรือร้าน<input id="menu-search" type="search" placeholder="เช่น ข้าวกะเพรา"></label>' +
     '<label>หมวดอาหาร<select id="category-filter"><option value="">ทุกหมวด</option>' +
     categoryOptions(categoryFilter) + '</select></label></div>' +
-    '<h2 id="choose-shop">เลือกร้าน</h2><div class="shop-picker" role="group" aria-labelledby="choose-shop">' +
+    '<h2 id="choose-shop">เลือกร้าน</h2><div class="shop-picker shop-grid" role="group" aria-labelledby="choose-shop">' +
     shopButtons + '</div><h2>เมนูอาหาร</h2><div class="food-grid">' + cards +
     '</div><p id="menu-empty" hidden>ไม่พบเมนู ลองเปลี่ยนคำค้น ร้าน หรือหมวดอาหาร</p>' +
-    '<h2>ติดตามออเดอร์ของฉัน</h2>';
+    '<h2 id="my-orders">ติดตามออเดอร์ของฉัน</h2>';
 }
 
 function filterMenu() {
@@ -384,7 +417,10 @@ function canAccess(order, actor, id) {
 
 function render() {
   const view = get('#view');
-  if (view.hidden) return;
+  if (view.hidden) {
+    if (currentView === 'home') renderHome();
+    return;
+  }
   if (checkout) {
     if (!view.querySelector('[data-checkout]')) view.innerHTML = checkoutForm();
     refreshPayment(view.querySelector('[data-checkout]'));
@@ -440,7 +476,8 @@ get('#view').onchange = event => {
 };
 
 get('#view').onclick = event => {
-  const { next, close, status, toggle, paused, backMenu, shopChoice } = event.target.dataset;
+  const { next, close, status, toggle, paused, backMenu, shopChoice } =
+    (event.target.closest('[data-shop-choice]') ?? event.target).dataset;
   const actor = currentView;
   const id = demoShop ?? seller?.id;
   if (shopChoice !== undefined && actor === 'buyer') {
@@ -573,6 +610,8 @@ window.addEventListener('storage', event => {
   else return;
   render();
 });
+
+renderHome();
 
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('./sw.js').catch(error => console.warn('Service worker registration failed', error));

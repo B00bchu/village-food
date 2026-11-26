@@ -2,21 +2,36 @@
 <html lang="th">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="theme-color" content="#43216f">
+<meta name="theme-color" content="#143532">
 <link rel="manifest" href="./app.webmanifest">
 <link rel="icon" href="./icon-192.png" type="image/png">
 <link rel="stylesheet" href="./style.css">
 <title>ตลาดอาหารหมู่บ้าน</title>
-<header><div><strong>ตลาดอาหารหมู่บ้าน</strong><small>ต้นแบบ · ข้อมูลจำลองในเครื่องนี้</small></div></header>
+<header>
+  <div class="header-inner">
+    <a class="brand" href="./"><img src="./icon-192.png" width="40" height="40" alt=""><span>ตลาดอาหารหมู่บ้าน</span></a>
+    <span class="header-label">ตลาดทดลอง</span>
+  </div>
+</header>
 <main>
   <section id="home">
-    <h1>วันนี้จะซื้อหรือขายอาหาร?</h1>
-    <div class="role-grid">
-      <button data-page="buyer"><strong>ลูกค้า</strong><span>เลือกอาหาร สั่งซื้อ และติดตามออเดอร์</span></button>
-      <button data-page="seller"><strong>แม่ค้า</strong><span>ลงทะเบียนร้าน ลงขาย และรับออเดอร์</span></button>
+    <div class="home-hero">
+      <div class="hero-copy">
+        <h1>อาหารอร่อย<br>จากร้านใกล้บ้าน</h1>
+        <p>เลือกเมนูจากร้านในหมู่บ้าน แล้วให้ร้านจัดส่งถึงบ้าน</p>
+        <button data-page="buyer">เลือกอาหาร <span aria-hidden="true">→</span></button>
+      </div>
+      <img class="hero-photo" src="./market-hero.webp" alt="" width="900" height="600">
     </div>
-    <button data-page="guest" class="secondary">สั่งแทน (ไม่ต้องลงทะเบียน)</button>
-    <button data-page="admin" class="secondary">ภาพรวมแอดมินทดลอง</button>
+    <div class="role-grid">
+      <button data-page="guest" class="service-card"><span class="service-icon" aria-hidden="true">→</span><span><strong>สั่งแทน</strong><small>กรอกที่อยู่ผู้รับตอนสั่ง</small></span><span class="service-arrow" aria-hidden="true">→</span></button>
+      <button data-page="seller" class="service-card"><span class="service-icon" aria-hidden="true">+</span><span><strong>เปิดร้านหรือจัดการออเดอร์</strong><small>ลงขายเมนูและรับออเดอร์</small></span><span class="service-arrow" aria-hidden="true">→</span></button>
+    </div>
+    <div class="home-market">
+      <h2>เลือกร้านในหมู่บ้าน</h2>
+      <div id="home-shops" class="shop-grid"></div>
+    </div>
+    <button data-page="admin" class="text-button">ภาพรวมแอดมินทดลอง</button>
   </section>
   <nav id="back" hidden><button data-page="home" class="secondary">กลับหน้าแรก</button></nav>
   <section id="customer-registration" hidden>

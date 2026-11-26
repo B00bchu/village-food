@@ -10,6 +10,11 @@ const types = {
   'app.webmanifest': 'application/manifest+json',
   'icon-192.png': 'image/png',
   'icon-512.png': 'image/png',
+  'market-hero.webp': 'image/webp',
+  'food-rice.webp': 'image/webp',
+  'food-noodles.webp': 'image/webp',
+  'food-dessert.webp': 'image/webp',
+  'food-tea.webp': 'image/webp',
 };
 const port = Number(process.env.PORT ?? 4173);
 createServer(async (request, response) => {
