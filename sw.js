@@ -1,4 +1,4 @@
-const cacheName = 'village-food-shell-v10';
+const cacheName = 'village-food-shell-v11';
 const assets = ['./', './index.html', './style.css', './app.mjs', './model.mjs', './app.webmanifest', './icon-192.png', './icon-512.png',
   './market-hero.webp', './food-rice.webp', './food-noodles.webp', './food-dessert.webp', './food-tea.webp'];
 self.addEventListener('install', event => {
