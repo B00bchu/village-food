@@ -33,15 +33,16 @@
       </fieldset>
     </form>
     <div class="identity-providers" data-identity-providers hidden>
-      <button type="button" class="secondary" data-provider="google" hidden>เข้าสู่ระบบด้วย Google</button>
-      <button type="button" class="secondary" data-provider="facebook" hidden>เข้าสู่ระบบด้วย Facebook</button>
+      <button type="button" class="secondary" data-provider="google" disabled>เข้าสู่ระบบด้วย Google</button>
+      <button type="button" class="secondary" data-provider="facebook" disabled>เข้าสู่ระบบด้วย Facebook</button>
+      <p data-provider-status role="status">กำลังตรวจสอบผู้ให้บริการเข้าสู่ระบบ</p>
     </div>
     <div data-signed-in hidden>
       <p>เข้าสู่ระบบแล้ว <strong></strong></p>
       <button type="button" data-enter-market>เข้าสู่ตลาด</button>
       <button type="button" class="secondary" data-sign-out>ออกจากระบบ</button>
     </div>
-    <p role="status"></p>
+    <p role="status" data-account-status></p>
   </section>
   <div id="app-content" hidden>
   <div id="online-account" hidden>

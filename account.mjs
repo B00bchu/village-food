@@ -1,16 +1,19 @@
-import { oauthProviders, projectUrl, publishableKey } from './supabase-config.mjs';
+import { projectUrl, publishableKey } from './supabase-config.mjs';
 
 const oauthKey = 'ban-eua-market-oauth-v1';
 const sessionKey = 'ban-eua-market-session-v1';
 const app = document.querySelector('#market-accounts');
 const form = app.querySelector('form');
-const notice = app.querySelector('[role="status"]');
+const notice = app.querySelector('[data-account-status]');
 const roleTitle = app.querySelector('h2');
 const submit = form.querySelector('button[type="submit"]');
 const modeButton = form.querySelector('[data-account-mode]');
 const controls = app.querySelector('[data-account-roles]');
 const providers = app.querySelector('[data-identity-providers]');
+const providerStatus = providers.querySelector('[data-provider-status]');
+const enabledProviders = new Set();
 const signedIn = app.querySelector('[data-signed-in]');
+const marketButton = signedIn.querySelector('[data-enter-market]');
 const email = form.elements.email;
 const password = form.elements.password;
 
@@ -58,7 +61,7 @@ function readSession() {
 function showSession(session) {
   form.hidden = Boolean(session);
   controls.hidden = Boolean(session);
-  providers.hidden = Boolean(session) || oauthProviders.length === 0;
+  providers.hidden = Boolean(session);
   signedIn.hidden = !session;
   if (session) {
     roleTitle.textContent = 'บัญชี' + labels[session.role];
@@ -80,6 +83,7 @@ function storeSession(result, accountRole, fallbackEmail = '') {
   };
   sessionStorage.setItem(sessionKey, JSON.stringify(session));
   showSession(session);
+  return session;
 }
 
 const callbackUrl = new URL('./', location.href).href;
@@ -91,7 +95,7 @@ function base64Url(bytes) {
 providers.addEventListener('click', async event => {
   const button = event.target.closest('[data-provider]');
   const provider = button?.dataset.provider;
-  if (!oauthProviders.includes(provider)) return;
+  if (!enabledProviders.has(provider)) return;
   button.disabled = true;
   try {
     const verifier = base64Url(crypto.getRandomValues(new Uint8Array(32)));
@@ -125,7 +129,7 @@ async function finishOAuth() {
       throw new Error('Sign-in attempt is invalid or expired');
     }
     const result = await auth('token?grant_type=pkce', { auth_code: code, code_verifier: pending.verifier });
-    storeSession(result, pending.role);
+    await enterMarket(storeSession(result, pending.role));
   } catch {
     notice.textContent = 'เข้าสู่ระบบผ่านผู้ให้บริการไม่สำเร็จ กรุณาลองใหม่';
   } finally {
@@ -168,7 +172,7 @@ form.onsubmit = async event => {
       notice.textContent = 'หากใช้ที่อยู่อีเมลนี้สมัครได้ ระบบจะส่งลิงก์ยืนยันไปทางอีเมล';
       return;
     }
-    storeSession(result, role, credentials.email);
+    await enterMarket(storeSession(result, role, credentials.email));
   } catch (error) {
     notice.textContent = error instanceof TypeError ? 'เชื่อมต่อระบบบัญชีไม่ได้ กรุณาลองใหม่' : error.message;
   } finally {
@@ -177,23 +181,46 @@ form.onsubmit = async event => {
   }
 };
 
-signedIn.querySelector('[data-enter-market]').onclick = async event => {
-  const session = readSession();
+async function enterMarket(session) {
   if (!session || session.expiresAt <= Date.now()) {
+    sessionStorage.removeItem(sessionKey);
     showSession(null);
     notice.textContent = 'กรุณาเข้าสู่ระบบอีกครั้ง';
     return;
   }
-  event.target.disabled = true;
+  marketButton.disabled = true;
   try {
     const { startMarket } = await import('./app.mjs');
     await startMarket(session);
   } catch {
-    notice.textContent = 'ระบบตลาดยังไม่พร้อม กรุณาลองใหม่ภายหลัง';
+    notice.textContent = 'เปิดหน้าตลาดไม่ได้ กรุณากดเข้าสู่ตลาดอีกครั้ง';
   } finally {
-    event.target.disabled = false;
+    marketButton.disabled = false;
   }
-};
+}
+
+async function loadProviders() {
+  try {
+    const response = await fetch(projectUrl + '/auth/v1/settings', {
+      headers: { apikey: publishableKey }, cache: 'no-store',
+    });
+    if (!response.ok) throw new Error('Provider settings unavailable');
+    const { external } = await response.json();
+    const unavailable = [];
+    for (const button of providers.querySelectorAll('[data-provider]')) {
+      const name = button.dataset.provider;
+      button.disabled = external?.[name] !== true;
+      if (button.disabled) unavailable.push(name === 'google' ? 'Google' : 'Facebook');
+      else enabledProviders.add(name);
+    }
+    providerStatus.textContent = unavailable.length
+      ? 'รอเปิดใช้งาน ' + unavailable.join(' และ ') : '';
+  } catch {
+    providerStatus.textContent = 'ตรวจสอบการเข้าสู่ระบบผ่าน Google และ Facebook ไม่ได้';
+  }
+}
+
+marketButton.onclick = () => enterMarket(readSession());
 
 document.querySelector('#market-sign-out').onclick = async () => {
   const session = readSession();
@@ -221,14 +248,15 @@ if (publishableKey.startsWith('sb_publishable_')) {
   const valid = session?.expiresAt > Date.now() && Object.hasOwn(labels, session.role);
   if (!valid) sessionStorage.removeItem(sessionKey);
   showSession(valid ? session : null);
-  for (const button of providers.querySelectorAll('button')) {
-    button.hidden = !oauthProviders.includes(button.dataset.provider);
-  }
   app.hidden = false;
+  loadProviders();
+  const hasOAuthCallback = new URLSearchParams(location.search).has('code') ||
+    new URLSearchParams(location.search).has('error');
   const fragment = new URLSearchParams(location.hash.slice(1));
   if (fragment.has('access_token')) {
     history.replaceState(null, '', location.pathname + location.search);
     notice.textContent = 'ยืนยันอีเมลแล้ว กรุณาเข้าสู่ระบบ';
   }
-  await finishOAuth();
+  if (hasOAuthCallback) await finishOAuth();
+  else if (valid) await enterMarket(session);
 }

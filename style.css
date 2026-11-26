@@ -200,3 +200,5 @@ body[data-mode=seller] .order-tabs button[aria-pressed=true], body[data-mode=sel
 .account-fields { display: grid; gap: .65rem; padding: 0; border: 0; }
 .account-fields label { display: grid; margin: 0; }
 .identity-providers { display: grid; gap: .5rem; margin-block: .85rem; }
+.identity-providers button:disabled { opacity: .65; cursor: not-allowed; }
+.identity-providers [data-provider-status]:empty { display: none; }
