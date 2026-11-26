@@ -1,4 +1,4 @@
-import { menu, statuses, createOrder, advance, review, closeOrder, isActive } from './model.mjs';
+import { categories, menu, statuses, createOrder, advance, review, closeOrder, isActive } from './model.mjs';
 
 const dateTime = new Intl.DateTimeFormat('th-TH', { dateStyle: 'short', timeStyle: 'short' });
 
@@ -60,6 +60,8 @@ let catalog = readCatalog();
 let currentView = 'home';
 let zone = 'เหนือ';
 let search = '';
+let shopFilter = '';
+let categoryFilter = '';
 let seller;
 let customer;
 let demoShop;
@@ -95,6 +97,8 @@ async function update(key, mutate, success) {
 function show(view) {
   currentView = view;
   search = '';
+  shopFilter = '';
+  categoryFilter = '';
   checkout = undefined;
   demoShop = undefined;
   challenge = undefined;
@@ -245,13 +249,28 @@ function rating(id) {
   return 'คะแนนร้าน ' + (sum / rated.length).toFixed(1) + '/5 (' + rated.length + ' รีวิว)';
 }
 
+function categoryOptions(selected) {
+  return Object.entries(categories).map(([id, label]) =>
+    '<option value="' + id + '"' + (id === selected ? ' selected' : '') + '>' + label + '</option>').join('');
+}
+
+function itemCategory(item) {
+  return Object.hasOwn(categories, item.category) ? item.category : 'other';
+}
+
 function buyerMenu() {
   const zoneOptions = ['เหนือ', 'ใต้'].map(name =>
     '<option' + (name === zone ? ' selected' : '') + '>' + name + '</option>').join('');
-  const cards = listings().filter(item => item.zone === zone && !item.paused).map(item =>
+  const available = listings().filter(item => item.zone === zone && !item.paused);
+  const shops = new Map(available.map(item => [shopId(item), item.shop]));
+  if (!shops.has(shopFilter)) shopFilter = '';
+  const shopOptions = [...shops].map(([id, name]) =>
+    '<option value="' + escapeText(id).replaceAll('"', '&quot;') + '"' +
+    (id === shopFilter ? ' selected' : '') + '>' + escapeText(name) + '</option>').join('');
+  const cards = available.map(item =>
     '<article class="food-card"><div class="food-heading"><h3>' + escapeText(item.name) +
     '</h3><strong class="price">฿' + item.price + '</strong></div><p class="shop-name">' +
-    escapeText(item.shop) + '</p>' + (item.description ? '<p>' + escapeText(item.description) + '</p>' : '') +
+    escapeText(item.shop) + ' · ' + categories[itemCategory(item)] + '</p>' + (item.description ? '<p>' + escapeText(item.description) + '</p>' : '') +
     '<p class="rating">' + rating(shopId(item)) + '</p><form data-item="' + item.id +
     '"><label>จำนวน<input name="quantity" type="number" min="1" max="20" value="1" required></label>' +
     '<button>ตรวจสอบออเดอร์</button></form></article>').join('');
@@ -263,9 +282,12 @@ function buyerMenu() {
   const heading = customer ? 'สั่งอาหารใกล้บ้าน' : 'สั่งแทน';
   return '<div class="market-heading"><h1>' + heading + '</h1>' + profile + '</div>' +
     '<div class="market-filters"><label>ค้นหาอาหารหรือร้าน<input id="menu-search" type="search" placeholder="เช่น ข้าวกะเพรา"></label>' +
-    '<label>โซนจัดส่ง<select id="zone">' + zoneOptions + '</select></label></div>' +
+    '<label>โซนจัดส่ง<select id="zone">' + zoneOptions + '</select></label>' +
+    '<label>เลือกร้าน<select id="shop-filter"><option value="">ทุกร้าน</option>' + shopOptions + '</select></label>' +
+    '<label>หมวดอาหาร<select id="category-filter"><option value="">ทุกหมวด</option>' +
+    categoryOptions(categoryFilter) + '</select></label></div>' +
     '<h2>เมนูในโซน' + zone + '</h2><div class="food-grid">' + cards +
-    '</div><p id="menu-empty" hidden>ไม่พบเมนู ลองเปลี่ยนคำค้นหรือโซนจัดส่ง</p>' +
+    '</div><p id="menu-empty" hidden>ไม่พบเมนู ลองเปลี่ยนคำค้น ร้าน หมวดอาหาร หรือโซนจัดส่ง</p>' +
     '<h2>ติดตามออเดอร์ของฉัน</h2>';
 }
 
@@ -276,7 +298,9 @@ function filterMenu() {
   for (const card of document.querySelectorAll('.food-card')) {
     const item = items.get(card.querySelector('[data-item]').dataset.item);
     const text = [item.name, item.shop, item.description].join(' ').toLocaleLowerCase('th');
-    card.hidden = !text.includes(query);
+    card.hidden = !text.includes(query) ||
+      (shopFilter !== '' && shopId(item) !== shopFilter) ||
+      (categoryFilter !== '' && itemCategory(item) !== categoryFilter);
     if (!card.hidden) count += 1;
   }
   get('#menu-empty').hidden = count > 0;
@@ -349,6 +373,7 @@ function sellerMenu() {
     '<button>บันทึก QR</button></form><p>' + (seller.qr ? 'มี QR รับโอนแล้ว' : 'ร้านเปิดรับเงินสดอยู่') + '</p></details>' +
     '<h2>ลงขายอาหาร</h2><form data-listing><label>ชื่อเมนู<input name="name" maxlength="80" required></label>' +
     '<label>รายละเอียด<input name="description" maxlength="200" required></label>' +
+    '<label>หมวดอาหาร<select name="category">' + categoryOptions('meals') + '</select></label>' +
     '<label>ราคา (บาท)<input name="price" type="number" min="1" max="9999" required></label>' +
     '<button>ลงขายเมนู</button></form>' + cards + '<h2>ออเดอร์ร้านค้า</h2>';
 }
@@ -411,6 +436,12 @@ get('#view').onchange = event => {
   } else if (event.target.id === 'zone') {
     zone = event.target.value;
     render();
+  } else if (event.target.id === 'shop-filter') {
+    shopFilter = event.target.value;
+    filterMenu();
+  } else if (event.target.id === 'category-filter') {
+    categoryFilter = event.target.value;
+    filterMenu();
   } else if (event.target.id === 'managed-shop') {
     demoShop = event.target.value || undefined;
     get('#view').replaceChildren();
@@ -471,8 +502,9 @@ get('#view').onsubmit = async event => {
   } else if (listing !== undefined && actor === 'seller' && !demoShop) {
     const name = formData.get('name').trim();
     const description = formData.get('description').trim();
+    const category = formData.get('category');
     const price = Number(formData.get('price'));
-    if (!name || !description || !Number.isInteger(price) || price < 1 || price > 9999) {
+    if (!name || !description || !Object.hasOwn(categories, category) || !Number.isInteger(price) || price < 1 || price > 9999) {
       notice('กรุณาระบุชื่อ รายละเอียด และราคาให้ครบ');
       return;
     }
@@ -481,7 +513,7 @@ get('#view').onsubmit = async event => {
       const shop = catalog.shops.find(entry => entry.id === id);
       if (!shop) return false;
       catalog.items.push({ id: crypto.randomUUID(), shopId: id, shop: shop.name,
-        zone: shop.zone, name, description, price });
+        zone: shop.zone, name, description, price, category });
       form.reset();
       return true;
     }, 'ลงขายเมนูแล้ว').finally(() => { event.submitter.disabled = false; });

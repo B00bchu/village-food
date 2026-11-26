@@ -1,4 +1,4 @@
-const cacheName = 'village-food-shell-v7';
+const cacheName = 'village-food-shell-v8';
 const assets = ['./', './index.html', './style.css', './app.mjs', './model.mjs', './app.webmanifest', './icon-192.png', './icon-512.png'];
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(cacheName).then(cache => cache.addAll(assets)));

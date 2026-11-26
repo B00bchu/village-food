@@ -1,7 +1,30 @@
+export const categories = {
+  meals: 'ข้าวและอาหารตามสั่ง',
+  noodles: 'ก๋วยเตี๋ยวและเส้น',
+  sides: 'กับข้าวและแกง',
+  snacks: 'ของกินเล่น',
+  desserts: 'ขนมและของหวาน',
+  drinks: 'เครื่องดื่ม',
+  other: 'อื่น ๆ',
+};
+
 export const menu = [
-  { id: 'rice', shop: 'ครัวหน้าซอย', name: 'ข้าวกะเพราไก่ไข่ดาว', zone: 'เหนือ', price: 60 },
-  { id: 'soup', shop: 'ครัวหน้าซอย', name: 'ต้มจืดเต้าหู้หมูสับ', zone: 'เหนือ', price: 55 },
-  { id: 'noodles', shop: 'ก๋วยเตี๋ยวบ้านสวน', name: 'ก๋วยเตี๋ยวหมูน้ำใส', zone: 'ใต้', price: 50 },
+  { id: 'rice', shop: 'ครัวหน้าซอย', name: 'ข้าวกะเพราไก่ไข่ดาว', zone: 'เหนือ', price: 60, category: 'meals' },
+  { id: 'soup', shop: 'ครัวหน้าซอย', name: 'ต้มจืดเต้าหู้หมูสับ', zone: 'เหนือ', price: 55, category: 'sides' },
+  { id: 'garlic-chicken', shop: 'ครัวหน้าซอย', name: 'ข้าวไก่กระเทียม', zone: 'เหนือ', price: 55, category: 'meals' },
+  { id: 'pad-thai', shop: 'ผัดไทยเตาถ่าน', name: 'ผัดไทยกุ้งสด', zone: 'เหนือ', price: 70, category: 'noodles' },
+  { id: 'fried-tofu', shop: 'ผัดไทยเตาถ่าน', name: 'เต้าหู้ทอด', zone: 'เหนือ', price: 35, category: 'snacks' },
+  { id: 'green-curry', shop: 'แกงบ้านยาย', name: 'แกงเขียวหวานไก่', zone: 'เหนือ', price: 65, category: 'sides' },
+  { id: 'mango-rice', shop: 'หวานละมุน', name: 'ข้าวเหนียวมะม่วง', zone: 'เหนือ', price: 55, category: 'desserts' },
+  { id: 'thai-tea', shop: 'หวานละมุน', name: 'ชาไทยเย็น', zone: 'เหนือ', price: 35, category: 'drinks' },
+  { id: 'noodles', shop: 'ก๋วยเตี๋ยวบ้านสวน', name: 'ก๋วยเตี๋ยวหมูน้ำใส', zone: 'ใต้', price: 50, category: 'noodles' },
+  { id: 'tom-yum-noodles', shop: 'ก๋วยเตี๋ยวบ้านสวน', name: 'ก๋วยเตี๋ยวต้มยำ', zone: 'ใต้', price: 60, category: 'noodles' },
+  { id: 'grilled-pork', shop: 'เตาปิ้งท้ายหมู่บ้าน', name: 'หมูปิ้งชุดเล็ก', zone: 'ใต้', price: 45, category: 'snacks' },
+  { id: 'grilled-chicken', shop: 'เตาปิ้งท้ายหมู่บ้าน', name: 'ข้าวไก่ย่าง', zone: 'ใต้', price: 60, category: 'meals' },
+  { id: 'massaman', shop: 'ครัวบ้านร่มไม้', name: 'มัสมั่นไก่', zone: 'ใต้', price: 70, category: 'sides' },
+  { id: 'shrimp-rice', shop: 'ครัวบ้านร่มไม้', name: 'ข้าวผัดกุ้ง', zone: 'ใต้', price: 65, category: 'meals' },
+  { id: 'coconut-pancakes', shop: 'ขนมหน้าสวน', name: 'ขนมครก', zone: 'ใต้', price: 35, category: 'desserts' },
+  { id: 'lime-tea', shop: 'ขนมหน้าสวน', name: 'ชามะนาว', zone: 'ใต้', price: 35, category: 'drinks' },
 ];
 export const statuses = ['รอร้านรับ', 'กำลังทำ', 'กำลังจัดส่ง', 'ส่งแล้ว'];
 
