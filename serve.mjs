@@ -4,6 +4,8 @@ import { readFile } from 'node:fs/promises';
 const types = {
   'index.html': 'text/html; charset=utf-8',
   'style.css': 'text/css; charset=utf-8',
+  'account.mjs': 'text/javascript; charset=utf-8',
+  'supabase-config.mjs': 'text/javascript; charset=utf-8',
   'app.mjs': 'text/javascript; charset=utf-8',
   'model.mjs': 'text/javascript; charset=utf-8',
   'sw.js': 'text/javascript; charset=utf-8',
