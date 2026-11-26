@@ -177,7 +177,33 @@ form.onsubmit = async event => {
   }
 };
 
-signedIn.querySelector('button').onclick = async () => {
+signedIn.querySelector('[data-enter-market]').onclick = async event => {
+  const session = readSession();
+  if (!session || session.expiresAt <= Date.now()) {
+    showSession(null);
+    notice.textContent = 'กรุณาเข้าสู่ระบบอีกครั้ง';
+    return;
+  }
+  event.target.disabled = true;
+  try {
+    const { startMarket } = await import('./app.mjs');
+    await startMarket(session);
+  } catch {
+    notice.textContent = 'ระบบตลาดยังไม่พร้อม กรุณาลองใหม่ภายหลัง';
+  } finally {
+    event.target.disabled = false;
+  }
+};
+
+document.querySelector('#market-sign-out').onclick = async () => {
+  const session = readSession();
+  sessionStorage.removeItem(sessionKey);
+  document.querySelector('#app-content').hidden = true;
+  if (session?.token) await auth('logout?scope=local', {}, session.token).catch(() => {});
+  location.reload();
+};
+
+signedIn.querySelector('[data-sign-out]').onclick = async () => {
   const session = readSession();
   sessionStorage.removeItem(sessionKey);
   showSession(null);

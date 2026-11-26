@@ -1,3 +1,4 @@
+import { marketRequest, marketSnapshot, statusCodes } from './market-api.mjs';
 import { categories, menu, statuses, createOrder, advance, review, closeOrder, isActive } from './model.mjs';
 
 const dayInThailand = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Bangkok' });
@@ -8,7 +9,7 @@ function escapeText(value) {
 }
 
 function orderCard(order) {
-  const item = listings().find(entry => entry.id === order.item);
+  const item = listings().find(entry => entry.id === order.item) ?? { name: 'เมนูอาหาร', shop: order.shop ?? 'ร้านค้า' };
   const next = currentView === 'seller' && isActive(order)
     ? '<button data-next="' + order.id + '" data-status="' + order.status + '">' +
       (order.status === 0 ? 'รับออเดอร์' : statuses[order.status + 1]) + '</button>' : '';
@@ -57,7 +58,7 @@ const guestKey = 'village-food-guest-v1';
 const read = (key, fallback) => JSON.parse(localStorage.getItem(key)) ?? fallback;
 const readCatalog = () => read(catalogKey, { shops: [], items: [] });
 const notice = message => { get('#notice').textContent = message; };
-const buyer = localStorage.getItem(guestKey) ?? crypto.randomUUID();
+let buyer = localStorage.getItem(guestKey) ?? crypto.randomUUID();
 localStorage.setItem(guestKey, buyer);
 
 let orders = read(ordersKey, []);
@@ -70,14 +71,103 @@ let orderFilter = 'all';
 let seller;
 let customer;
 let demoShop;
+let online;
+let onlineRatings;
+let checkoutId;
 let checkout;
 let storeTab = 'menu';
 let favoritesOnly = false;
 const favorites = new Set(read('village-food-favorites-v1', []));
 const cart = new Map();
 
-const listings = () => [...menu, ...catalog.items];
+const listings = () => online ? catalog.items : [...menu, ...catalog.items];
 const shopId = item => item.shopId ?? item.shop;
+
+async function refreshOnline() {
+  const snapshot = await marketSnapshot(online.token);
+  catalog = snapshot.catalog;
+  orders = snapshot.orders;
+  onlineRatings = snapshot.ratings;
+  online.profile = snapshot.profile;
+  seller = catalog.shops.find(shop => shop.owner === buyer);
+}
+
+function writeOnline(path, method, body, prefer) {
+  return marketRequest('/rest/v1/' + path, online.token, { method, body, prefer });
+}
+
+async function persistOnline(key, before, after) {
+  if (key === catalogKey) {
+    for (const shop of after.shops) {
+      const previous = before.shops.find(entry => entry.id === shop.id);
+      if (JSON.stringify(previous) === JSON.stringify(shop)) continue;
+      const patch = { name: shop.name, description: shop.offer, cover_path: shop.cover ?? null,
+        qr_path: shop.qr ?? null, opens_at: shop.opens || null, closes_at: shop.closes || null,
+        is_open: !shop.closed };
+      if (previous) await writeOnline('market_shops?id=eq.' + shop.id, 'PATCH', patch);
+      else await writeOnline('market_shops', 'POST', patch);
+    }
+    for (const item of after.items) {
+      const previous = before.items.find(entry => entry.id === item.id);
+      if (!previous) await writeOnline('market_menu', 'POST', {
+        shop_id: item.shopId, name: item.name, description: item.description, category: item.category,
+        price_baht: item.price, image_path: item.image || null, paused: Boolean(item.paused),
+      });
+      else if (Boolean(previous.paused) !== Boolean(item.paused)) {
+        await writeOnline('market_menu?id=eq.' + item.id, 'PATCH', { paused: item.paused });
+      }
+    }
+    return true;
+  }
+  const added = after.filter(order => !before.some(previous => previous.id === order.id));
+  if (added.length) {
+    checkoutId ??= crypto.randomUUID();
+    await writeOnline('rpc/market_checkout', 'POST', {
+      p_checkout_id: checkoutId,
+      p_shops: added.map(order => ({
+        shop_id: order.shopId, payment: order.payment,
+        items: order.lines.map(line => ({ menu_id: line.item, quantity: line.quantity, price_baht: line.price })),
+      })),
+      p_delivery: added[0].delivery, p_handoff: added[0].handoff,
+    });
+    return true;
+  }
+  const changed = after.find(order =>
+    JSON.stringify(order) !== JSON.stringify(before.find(previous => previous.id === order.id)));
+  if (!changed) return false;
+  const previous = before.find(order => order.id === changed.id);
+  const message = changed.messages?.length > (previous.messages?.length ?? 0) ? changed.messages.at(-1).text : null;
+  const action = message ? 'message' : changed.score !== previous.score ? 'review' :
+    changed.closed ? (currentView === 'seller' ? 'reject' : 'cancel') : 'advance';
+  return writeOnline('rpc/market_update_order', 'POST', {
+    p_id: changed.id, p_action: action, p_expected: statusCodes[previous.status],
+    p_score: changed.score ?? null, p_message: message,
+  });
+}
+
+export async function startMarket(session) {
+  if (online) return;
+  const user = await marketRequest('/auth/v1/user', session.token);
+  if (!user?.id) throw new Error('Account missing user ID');
+  online = { token: session.token };
+  buyer = user.id;
+  try {
+    await refreshOnline();
+  } catch (error) {
+    online = undefined;
+    throw error;
+  }
+  get('#app-content').hidden = false;
+  get('#launch-status').hidden = true;
+  get('#market-accounts').hidden = true;
+  get('#online-account').hidden = false;
+  get('[data-page="admin"]').hidden = true;
+  if (session.role === 'seller') show(seller ? 'seller' : 'seller-unavailable');
+  else {
+    customer = online.profile;
+    show(customer ? 'buyer' : 'customer-registration');
+  }
+}
 
 async function update(key, mutate, success) {
   const commit = () => {
@@ -89,15 +179,28 @@ async function update(key, mutate, success) {
     return changed;
   };
   try {
-    const changed = navigator.locks ? await navigator.locks.request(key, commit) : commit();
+    const operation = async () => {
+      if (!online) return commit();
+      await refreshOnline();
+      const state = key === ordersKey ? orders : catalog;
+      const before = structuredClone(state);
+      if (!mutate(state)) return false;
+      const saved = await persistOnline(key, before, state);
+      await refreshOnline();
+      return saved;
+    };
+    const changed = navigator.locks ? await navigator.locks.request(key, operation) : await operation();
     if (changed && typeof success === 'function') success();
     render();
     if (typeof success !== 'function' || !changed) {
       notice(changed ? success : 'ข้อมูลเปลี่ยนแปลงแล้ว กรุณาตรวจสอบอีกครั้ง');
     }
   } catch {
-    catalog = readCatalog();
-    orders = read(ordersKey, []);
+    if (online) await refreshOnline().catch(() => {});
+    else {
+      catalog = readCatalog();
+      orders = read(ordersKey, []);
+    }
     notice('บันทึกข้อมูลไม่ได้ กรุณาลองอีกครั้ง');
   }
 }
@@ -116,6 +219,7 @@ function show(view, selectedShop = '') {
   get('#home').hidden = view !== 'home';
   get('#back').hidden = view === 'home';
   get('#seller-unavailable').hidden = view !== 'seller-unavailable';
+  get('#seller-create').hidden = !online;
   get('#customer-registration').hidden = view !== 'customer-registration';
   get('#customer-form').reset();
   get('#view').hidden = ['home', 'seller-unavailable', 'customer-registration'].includes(view);
@@ -138,11 +242,13 @@ get('main').addEventListener('click', event => {
   const action = event.target.closest('[data-page]');
   const view = action?.dataset.page;
   if (view === 'seller') {
-    catalog = readCatalog();
-    seller = catalog.shops.find(shop => shop.id === localStorage.getItem(sellerKey));
+    if (!online) {
+      catalog = readCatalog();
+      seller = catalog.shops.find(shop => shop.id === localStorage.getItem(sellerKey));
+    }
     show(seller ? 'seller' : 'seller-unavailable');
   } else if (view === 'buyer') {
-    customer = read(customerKey, null);
+    customer = online ? online.profile : read(customerKey, null);
     show(customer ? 'buyer' : 'customer-registration', action.dataset.homeShop ?? '');
   } else if (view === 'guest') {
     customer = null;
@@ -156,7 +262,7 @@ get('main').addEventListener('click', event => {
   }
 });
 
-get('#customer-form').onsubmit = event => {
+get('#customer-form').onsubmit = async event => {
   event.preventDefault();
   const data = new FormData(event.target);
   const profile = { name: data.get('name').trim(), ...readAddress(data) };
@@ -165,11 +271,35 @@ get('#customer-form').onsubmit = event => {
     return;
   }
   try {
-    localStorage.setItem(customerKey, JSON.stringify(profile));
+    if (online) {
+      await writeOnline('market_profiles?on_conflict=user_id', 'POST', {
+        ...profile, user_id: buyer,
+      }, 'resolution=merge-duplicates');
+      online.profile = profile;
+    } else localStorage.setItem(customerKey, JSON.stringify(profile));
     customer = profile;
     show('buyer', shopFilter);
   } catch {
     notice('บันทึกข้อมูลลูกค้าไม่ได้ กรุณาลองอีกครั้ง');
+  }
+};
+
+get('#seller-create').onsubmit = async event => {
+  event.preventDefault();
+  if (!online || seller) return;
+  const data = new FormData(event.target);
+  const name = data.get('name').trim();
+  const offer = data.get('offer').trim();
+  if (!name || !offer) return;
+  event.submitter.disabled = true;
+  try {
+    await writeOnline('market_shops', 'POST', { name, description: offer });
+    await refreshOnline();
+    show('seller');
+  } catch {
+    notice('สร้างร้านไม่ได้ กรุณาตรวจสอบว่าบัญชีนี้มีร้านแล้วหรือไม่');
+  } finally {
+    event.submitter.disabled = false;
   }
 };
 
@@ -203,6 +333,10 @@ async function readImage(file, optimize = false) {
 }
 
 function rating(id) {
+  if (online) {
+    const row = onlineRatings.get(id);
+    return row ? 'คะแนนร้าน ' + Number(row.average_score).toFixed(1) + '/5 (' + row.review_count + ' รีวิว)' : 'ยังไม่มีรีวิว';
+  }
   const itemIds = new Set(listings().filter(item => shopId(item) === id).map(item => item.id));
   const rated = orders.filter(order => order.score && itemIds.has(order.item));
   if (!rated.length) return 'ยังไม่มีรีวิว';
@@ -540,9 +674,9 @@ function sellerMenu(shopOrders) {
     ' · ฿' + item.price + ' · ' + (item.paused ? 'พักขาย' : 'กำลังขาย') +
     '</p><button class="secondary" data-toggle="' + item.id + '" data-paused="' +
     Boolean(item.paused) + '">' + (item.paused ? 'เปิดขาย' : 'พักขาย') + '</button></article>').join('');
-  const demoOptions = [...new Set(menu.map(item => item.shop))].map(name =>
+  const demoOptions = (online ? [] : [...new Set(menu.map(item => item.shop))]).map(name =>
     '<option' + (name === demoShop ? ' selected' : '') + '>' + name + '</option>').join('');
-  const selector = '<label>ร้านที่จัดการ<select id="managed-shop"><option value="">ร้านของฉัน</option>' +
+  const selector = online ? '' : '<label>ร้านที่จัดการ<select id="managed-shop"><option value="">ร้านของฉัน</option>' +
     demoOptions + '</select></label>';
   if (demoShop) return dashboard + selector + orderSection;
   return dashboard + '<div class="seller-tools">' +
@@ -678,6 +812,7 @@ get('#view').onclick = event => {
   } else if (openCart !== undefined && actor === 'buyer') {
     const lines = cartLines();
     if (!lines.length) return;
+    checkoutId = undefined;
     checkout = { lines };
     render();
     window.scrollTo(0, 0);
@@ -690,6 +825,7 @@ get('#view').onclick = event => {
     else cart.set(cartAdjust, quantity);
     const fields = new FormData(get('[data-checkout]'));
     const lines = cartLines();
+    checkoutId = undefined;
     checkout = lines.length ? { lines } : undefined;
     get('#view').replaceChildren();
     render();
@@ -863,6 +999,7 @@ get('#view').onsubmit = async event => {
     }, () => {
       cart.clear();
       checkout = undefined;
+      checkoutId = undefined;
       notice('ส่งออเดอร์ให้ ' + groups.length + ' ร้านแล้ว');
       requestAnimationFrame(() => get('#my-orders')?.scrollIntoView());
     });
@@ -890,7 +1027,21 @@ get('#view').onsubmit = async event => {
   }
 };
 
+get('#refresh-market').onclick = async event => {
+  event.target.disabled = true;
+  try {
+    await refreshOnline();
+    render();
+    notice('อัปเดตรายการล่าสุดแล้ว');
+  } catch {
+    notice('เชื่อมต่อไม่ได้ กรุณาเข้าสู่ระบบใหม่หากเซสชันหมดอายุ');
+  } finally {
+    event.target.disabled = false;
+  }
+};
+
 window.addEventListener('storage', event => {
+  if (online) return;
   if (event.key === ordersKey) orders = read(ordersKey, []);
   else if (event.key === catalogKey) {
     catalog = readCatalog();
