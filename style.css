@@ -207,3 +207,6 @@ body[data-mode=seller] .order-tabs button[aria-pressed=true], body[data-mode=sel
 #market-accounts { scroll-margin-top: 1rem; }
 #market-accounts .role-grid { margin-top: 0; margin-bottom: .75rem; }
 .facebook-login { background: #1858ab; border-color: #1858ab; color: white; }
+#launch-status { margin: .25rem auto .65rem; padding: .35rem .75rem; }
+#launch-status .village-art { width: min(100%,19rem); }
+#launch-status h1 { margin: .35rem 0; }

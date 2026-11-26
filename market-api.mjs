@@ -20,11 +20,11 @@ export async function marketRequest(path, token, { method = 'GET', body, prefer 
 export async function marketSnapshot(token) {
   const request = path => marketRequest('/rest/v1/' + path, token);
   const [shops, items, orders, ratings, profiles] = await Promise.all([
-    request('market_shops?select=id,owner_id,name,description,cover_path,qr_path,is_open,opens_at,closes_at'),
+    request('market_shops?select=id,name,description,cover_path,qr_path,is_open,opens_at,closes_at' + (token ? ',owner_id' : '')),
     request('market_menu?select=*'),
-    request('market_orders?select=*,market_order_items(*)&order=created_at.desc&limit=200'),
+    token ? request('market_orders?select=*,market_order_items(*)&order=created_at.desc&limit=200') : [],
     marketRequest('/rest/v1/rpc/market_ratings', token, { method: 'POST', body: {} }),
-    request('market_profiles?select=name,house,phase,lane&limit=1'),
+    token ? request('market_profiles?select=name,house,phase,lane&limit=1') : [],
   ]);
   const names = new Map(shops.map(shop => [shop.id, shop.name]));
   return {

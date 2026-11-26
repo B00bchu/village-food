@@ -1,5 +1,5 @@
-const cacheName = 'village-food-shell-v18';
-const assets = ['./', './index.html', './style.css', './app.mjs', './market-api.mjs', './account.mjs?v=18', './supabase-config.mjs', './model.mjs', './app.webmanifest', './icon-192.png', './icon-512.png',
+const cacheName = 'village-food-shell-v19';
+const assets = ['./', './index.html', './style.css', './app.mjs', './market-api.mjs', './account.mjs?v=19', './supabase-config.mjs', './model.mjs', './app.webmanifest', './icon-192.png', './icon-512.png',
   './market-hero.webp', './food-rice.webp', './food-noodles.webp', './food-dessert.webp', './food-tea.webp',
   './village-art.webp', './food-pad-thai.webp', './food-green-curry.webp', './food-grilled-pork.webp', './food-coconut-pancakes.webp'];
 self.addEventListener('install', event => {

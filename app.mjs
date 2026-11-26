@@ -145,12 +145,17 @@ async function persistOnline(key, before, after) {
   });
 }
 
-export async function startMarket(session) {
+export async function startMarket(session, beginGuestSession) {
   if (online) return;
-  const user = await marketRequest('/auth/v1/user', session.token);
-  if (!user?.id) throw new Error('Account missing user ID');
-  online = { token: session.token };
-  buyer = user.id;
+  const guest = session.role === 'guest';
+  if (session.token) {
+    const user = await marketRequest('/auth/v1/user', session.token);
+    if (!user?.id || (guest && !user.is_anonymous)) throw new Error('Account missing or invalid');
+    buyer = user.id;
+  } else if (!guest) {
+    throw new Error('Sign-in required');
+  }
+  online = { token: session.token, guest, beginGuestSession };
   try {
     await refreshOnline();
   } catch (error) {
@@ -164,7 +169,10 @@ export async function startMarket(session) {
   get('#online-account').hidden = false;
   get('[data-page="admin"]').hidden = true;
   if (session.role === 'seller') show(seller ? 'seller' : 'seller-unavailable');
-  else {
+  else if (guest) {
+    get('#market-sign-out').textContent = 'ออกจากโหมดไม่ระบุตัวตน';
+    show('buyer');
+  } else {
     customer = online.profile;
     show(customer ? 'buyer' : 'customer-registration');
   }
@@ -242,6 +250,10 @@ get('main').addEventListener('click', event => {
   }
   const action = event.target.closest('[data-page]');
   const view = action?.dataset.page;
+  if (online?.guest && ['home', 'seller', 'buyer', 'edit-customer', 'admin'].includes(view)) {
+    get('#market-sign-out').click();
+    return;
+  }
   if (view === 'seller') {
     if (!online) {
       catalog = readCatalog();
@@ -612,7 +624,8 @@ function shopCheckout(group) {
   return '<section class="checkout-shop"><div class="checkout-shop-title"><h2>' + label +
     '</h2><strong>ยอดร้าน ' + subtotal + '</strong></div><ul class="cart-lines">' + items +
     '</ul><fieldset data-payment-shop="' + attr(id) + '"><legend>วิธีชำระเงินร้าน ' + label + '</legend>' +
-    '<label><input type="radio" name="' + radioName + '" value="cash" checked>เงินสด</label>' +
+    '<label><input type="radio" name="' + radioName + '" value="cash" ' +
+    (online?.guest ? 'required' : 'checked') + '>เงินสด</label>' +
     '<label><input type="radio" name="' + radioName + '" value="transfer" disabled>โอน / สแกน QR</label>' +
     '<p data-cash-only hidden>ร้านนี้รับเงินสด</p><div data-qr-panel hidden>' +
     '<p><strong>โอนให้ร้าน ' + label + ' จำนวน ' + subtotal + '</strong></p>' +
@@ -777,7 +790,7 @@ get('#view').onchange = event => {
   }
 };
 
-get('#view').onclick = event => {
+get('#view').onclick = async event => {
   const target = event.target.closest('button');
   if (!target) {
     if (event.target.closest('a[href="#shop-payment"]')) get('#shop-payment').open = true;
@@ -813,8 +826,25 @@ get('#view').onclick = event => {
   } else if (openCart !== undefined && actor === 'buyer') {
     const lines = cartLines();
     if (!lines.length) return;
+    if (online?.guest && !online.token) {
+      target.disabled = true;
+      try {
+        const session = await online.beginGuestSession();
+        const user = await marketRequest('/auth/v1/user', session.token);
+        if (!user?.id || !user.is_anonymous) throw new Error('เริ่มเซสชันไม่ระบุตัวตนไม่ได้');
+        online.token = session.token;
+        buyer = user.id;
+        await refreshOnline();
+      } catch (error) {
+        notice(error.message);
+        get('#notice').scrollIntoView({ block: 'center' });
+        return;
+      } finally {
+        target.disabled = false;
+      }
+    }
     checkoutId = undefined;
-    checkout = { lines };
+    checkout = { lines: cartLines() };
     render();
     window.scrollTo(0, 0);
   } else if (cartAdjust && checkout) {

@@ -13,6 +13,7 @@ const providers = app.querySelector('[data-identity-providers]');
 const providerStatus = providers.querySelector('[data-provider-status]');
 const enabledProviders = new Set();
 const signedIn = app.querySelector('[data-signed-in]');
+const guestButton = app.querySelector('[data-enter-guest]');
 const marketButton = signedIn.querySelector('[data-enter-market]');
 const email = form.elements.email;
 const password = form.elements.password;
@@ -20,7 +21,7 @@ const password = form.elements.password;
 let role = 'buyer';
 let mode = 'sign-in';
 
-const labels = { buyer: 'ผู้ซื้อ', seller: 'แม่ค้า' };
+const labels = { buyer: 'ผู้ซื้อ', seller: 'แม่ค้า', guest: 'สำหรับผู้สั่งแบบไม่ระบุตัวตน' };
 
 function showForm() {
   roleTitle.textContent = (mode === 'sign-up' ? 'สมัครบัญชี' : 'เข้าสู่ระบบ') + labels[role];
@@ -44,6 +45,7 @@ async function auth(path, body, token) {
   if (!response.ok) {
     if (result.error_code === 'email_not_confirmed') throw new Error('กรุณากดยืนยันอีเมลก่อนเข้าสู่ระบบ');
     if (response.status === 429) throw new Error('ลองหลายครั้งเกินไป กรุณารอสักครู่แล้วลองใหม่');
+    if (result.error_code === 'anonymous_provider_disabled') throw new Error('ยังไม่ได้เปิดการสั่งแบบไม่ระบุตัวตนใน Supabase');
     if (result.error_code === 'invalid_credentials') throw new Error('อีเมลหรือรหัสผ่านไม่ถูกต้อง');
     throw new Error('ดำเนินการกับบัญชีไม่ได้ กรุณาตรวจข้อมูลและลองใหม่');
   }
@@ -62,6 +64,7 @@ function showSession(session) {
   form.hidden = Boolean(session);
   controls.hidden = Boolean(session);
   providers.hidden = Boolean(session);
+  guestButton.hidden = Boolean(session);
   signedIn.hidden = !session;
   if (session) {
     roleTitle.textContent = 'บัญชี' + labels[session.role];
@@ -139,7 +142,7 @@ async function finishOAuth() {
 
 controls.addEventListener('click', event => {
   const choice = event.target.closest('[data-account-role]')?.dataset.accountRole;
-  if (!Object.hasOwn(labels, choice)) return;
+  if (choice !== 'buyer' && choice !== 'seller') return;
   role = choice;
   mode = 'sign-in';
   notice.textContent = '';
@@ -181,8 +184,16 @@ form.onsubmit = async event => {
   }
 };
 
+async function beginGuestSession() {
+  const session = readSession();
+  if (session?.role === 'guest' && session.expiresAt > Date.now()) return session;
+  const result = await auth('signup', {});
+  if (!result.user?.is_anonymous) throw new Error('เริ่มเซสชันไม่ระบุตัวตนไม่ได้');
+  return storeSession(result, 'guest');
+}
+
 async function enterMarket(session) {
-  if (!session || session.expiresAt <= Date.now()) {
+  if (!session || (session.token && session.expiresAt <= Date.now())) {
     sessionStorage.removeItem(sessionKey);
     showSession(null);
     notice.textContent = 'กรุณาเข้าสู่ระบบอีกครั้ง';
@@ -191,7 +202,7 @@ async function enterMarket(session) {
   marketButton.disabled = true;
   try {
     const { startMarket } = await import('./app.mjs');
-    await startMarket(session);
+    await startMarket(session, beginGuestSession);
   } catch {
     notice.textContent = 'เปิดหน้าตลาดไม่ได้ กรุณากดเข้าสู่ตลาดอีกครั้ง';
   } finally {
@@ -221,6 +232,14 @@ async function loadProviders() {
 }
 
 marketButton.onclick = () => enterMarket(readSession());
+guestButton.onclick = async () => {
+  guestButton.disabled = true;
+  try {
+    await enterMarket({ role: 'guest' });
+  } finally {
+    guestButton.disabled = false;
+  }
+};
 
 document.querySelector('#market-sign-out').onclick = async () => {
   const session = readSession();

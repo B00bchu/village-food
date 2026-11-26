@@ -31,5 +31,6 @@ GitHub Pages ใช้สำหรับเผยแพร่หน้าเว�
 - ใช้ SQL Editor รัน `supabase/migrations/202611260001_market.sql` บนโปรเจกต์ที่ยังไม่มีตารางตลาด ไฟล์นี้สร้างโครงร้าน เมนู ออเดอร์ สิทธิ์รายแถว และคำสั่งสร้างออเดอร์หลายร้านในธุรกรรมเดียว
 - ใน Supabase Authentication ตั้ง Site URL และ Redirect URL เป็น `https://b00bchu.github.io/village-food/` เปิด Email สำหรับบัญชีอีเมลและรหัสผ่าน
 - หากใช้ Google หรือ Facebook ให้ตั้งค่า Provider ใน Supabase และตั้ง Callback URL ของผู้ให้บริการเป็น `https://oxrqgetfkztqfzaojxgo.supabase.co/auth/v1/callback` จากนั้นเพิ่มเฉพาะชื่อ Provider ที่เปิดแล้วใน `oauthProviders` ในไฟล์คอนฟิก
+- เปิด **Allow anonymous sign-ins** ใน Supabase Authentication เพื่อให้ผู้ซื้อแบบไม่ระบุตัวตนยืนยันออเดอร์ได้ ผู้ซื้อเปิดดูร้านได้ก่อน ข้อมูลบ้านเลขที่ เฟส ซอย และวิธีชำระเงินจะกรอกตอนสั่ง
 - หลัง SQL ชุดแรก ให้รัน `supabase/migrations/202611260002_operations.sql` เพื่อสร้างโปรไฟล์ลูกค้า คำสั่งอัปเดตออเดอร์ และคะแนนร้าน ข้อมูลต้นแบบในเครื่องจะไม่ย้ายขึ้นฐานข้อมูล
 - ใช้ปุ่ม **อัปเดตรายการ** เพื่อโหลดออเดอร์ล่าสุดจากฐานข้อมูล
