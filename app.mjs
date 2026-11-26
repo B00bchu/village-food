@@ -59,6 +59,7 @@ let orders = read(ordersKey, []);
 let catalog = readCatalog();
 let currentView = 'home';
 let zone = 'เหนือ';
+let search = '';
 let seller;
 let customer;
 let demoShop;
@@ -93,6 +94,7 @@ async function update(key, mutate, success) {
 
 function show(view) {
   currentView = view;
+  search = '';
   checkout = undefined;
   demoShop = undefined;
   challenge = undefined;
@@ -247,9 +249,10 @@ function buyerMenu() {
   const zoneOptions = ['เหนือ', 'ใต้'].map(name =>
     '<option' + (name === zone ? ' selected' : '') + '>' + name + '</option>').join('');
   const cards = listings().filter(item => item.zone === zone && !item.paused).map(item =>
-    '<article><h2>' + escapeText(item.name) + '</h2><p>' + escapeText(item.shop) + ' · ฿' +
-    item.price + '</p>' + (item.description ? '<p>' + escapeText(item.description) + '</p>' : '') +
-    '<p>' + rating(shopId(item)) + '</p><form data-item="' + item.id +
+    '<article class="food-card"><div class="food-heading"><h3>' + escapeText(item.name) +
+    '</h3><strong class="price">฿' + item.price + '</strong></div><p class="shop-name">' +
+    escapeText(item.shop) + '</p>' + (item.description ? '<p>' + escapeText(item.description) + '</p>' : '') +
+    '<p class="rating">' + rating(shopId(item)) + '</p><form data-item="' + item.id +
     '"><label>จำนวน<input name="quantity" type="number" min="1" max="20" value="1" required></label>' +
     '<button>ตรวจสอบออเดอร์</button></form></article>').join('');
   const profile = customer
@@ -258,8 +261,25 @@ function buyerMenu() {
       '<button class="secondary" data-page="guest">สั่งแทน</button> '
     : '<p>กรอกที่อยู่ของผู้รับตอนยืนยันออเดอร์</p>';
   const heading = customer ? 'สั่งอาหารใกล้บ้าน' : 'สั่งแทน';
-  return '<h1>' + heading + '</h1>' + profile + '<label>โซนจัดส่ง<select id="zone">' + zoneOptions +
-    '</select></label>' + cards + '<h2>ติดตามออเดอร์ของฉัน</h2>';
+  return '<div class="market-heading"><h1>' + heading + '</h1>' + profile + '</div>' +
+    '<div class="market-filters"><label>ค้นหาอาหารหรือร้าน<input id="menu-search" type="search" placeholder="เช่น ข้าวกะเพรา"></label>' +
+    '<label>โซนจัดส่ง<select id="zone">' + zoneOptions + '</select></label></div>' +
+    '<h2>เมนูในโซน' + zone + '</h2><div class="food-grid">' + cards +
+    '</div><p id="menu-empty" hidden>ไม่พบเมนู ลองเปลี่ยนคำค้นหรือโซนจัดส่ง</p>' +
+    '<h2>ติดตามออเดอร์ของฉัน</h2>';
+}
+
+function filterMenu() {
+  const query = search.trim().toLocaleLowerCase('th');
+  const items = new Map(listings().map(item => [item.id, item]));
+  let count = 0;
+  for (const card of document.querySelectorAll('.food-card')) {
+    const item = items.get(card.querySelector('[data-item]').dataset.item);
+    const text = [item.name, item.shop, item.description].join(' ').toLocaleLowerCase('th');
+    card.hidden = !text.includes(query);
+    if (!card.hidden) count += 1;
+  }
+  get('#menu-empty').hidden = count > 0;
 }
 
 function readAddress(data) {
@@ -295,9 +315,9 @@ function checkoutForm() {
       '<label>บ้านเลขที่<input name="house" maxlength="30" required></label>' +
       '<label>เฟส<input name="phase" maxlength="30" required></label>' +
       '<label>ซอย<input name="lane" maxlength="30" required></label></fieldset>';
-  return '<h1>ตรวจสอบและยืนยันออเดอร์</h1><p>' + escapeText(item.name) + ' × ' +
+  return '<div class="checkout-summary"><h1>ตรวจสอบและยืนยันออเดอร์</h1><p>' + escapeText(item.name) + ' × ' +
     quantity + ' · ร้าน ' + escapeText(item.shop) + ' · โซน' + item.zone +
-    '</p><p>ยอดรวม ฿' + item.price * quantity + ' · ส่งฟรีในรอบทดลอง</p>' +
+    '</p><p><strong>ยอดรวม ฿' + item.price * quantity + '</strong> · ส่งฟรีในรอบทดลอง</p></div>' +
     '<form data-checkout>' + address + '<fieldset><legend>วิธีชำระเงิน</legend>' +
     '<label><input type="radio" name="payment" value="cash" checked>เงินสด</label>' +
     '<label><input type="radio" name="payment" value="transfer">โอน / สแกน QR</label>' +
@@ -358,6 +378,8 @@ function render() {
   if (currentView === 'buyer') {
     visible = orders.filter(order => order.buyer === buyer);
     view.innerHTML = buyerMenu();
+    get('#menu-search').value = search;
+    filterMenu();
   } else if (currentView === 'seller') {
     visible = orders.filter(order => sellerOwns(order, demoShop ?? seller.id));
     view.innerHTML = sellerMenu();
@@ -375,6 +397,13 @@ function render() {
     form.elements.message.value = drafts.get(form.dataset.chat) ?? '';
   }
 }
+
+get('#view').oninput = event => {
+  if (event.target.id === 'menu-search') {
+    search = event.target.value;
+    filterMenu();
+  }
+};
 
 get('#view').onchange = event => {
   if (event.target.name === 'payment' && checkout) {

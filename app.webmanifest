@@ -5,8 +5,8 @@
   "lang": "th",
   "start_url": "./",
   "display": "standalone",
-  "background_color": "#f3f6f0",
-  "theme_color": "#194536",
+  "background_color": "#faf7ff",
+  "theme_color": "#43216f",
   "icons": [
     {"src": "icon-192.png", "sizes": "192x192", "type": "image/png"},
     {"src": "icon-512.png", "sizes": "512x512", "type": "image/png"}
