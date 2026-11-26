@@ -1,0 +1,24 @@
+* { box-sizing: border-box; }
+body { margin: 0; background: #f3f6f0; color: #17352b; font: 1rem/1.6 system-ui, sans-serif; }
+header { background: #194536; color: white; padding: 1.1rem; }
+header div, main { max-width: 54rem; margin: auto; }
+header strong { font-size: 1.4rem; }
+small { display: block; }
+main { padding: 1rem; }
+section, article { background: white; padding: 1rem; border-radius: 1rem; }
+article { border: 1px solid #cfdbd2; margin: .7rem 0; }
+nav, form { display: flex; gap: .65rem; flex-wrap: wrap; align-items: end; }
+nav { margin-bottom: 1rem; }
+label { display: inline-grid; gap: .25rem; }
+button, input, select { font: inherit; padding: .5rem .7rem; border-radius: .5rem; min-height: 44px; }
+input, select { max-width: 100%; border: 1px solid #728579; }
+button { border: 1px solid #194536; background: #194536; color: white; cursor: pointer; }
+nav button[aria-pressed=false], #logout { background: white; color: #194536; }
+button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px solid #bf6f23; outline-offset: 2px; }
+h1, h2, h3, p { margin: 0 0 .65rem; }
+#verify, #notice { margin-top: 1rem; }
+[hidden] { display: none !important; }
+article > button { margin: 0 .5rem .5rem 0; }
+details { margin-top: .65rem; }
+summary { cursor: pointer; }
+.messages { padding-inline-start: 1.4rem; overflow-wrap: anywhere; }

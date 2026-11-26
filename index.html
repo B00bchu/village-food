@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="th">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#194536">
+<link rel="manifest" href="./app.webmanifest">
+<link rel="icon" href="./icon-192.png" type="image/png">
+<link rel="stylesheet" href="./style.css">
+<title>ตลาดอาหารหมู่บ้าน</title>
+<header><div><strong>ตลาดอาหารหมู่บ้าน</strong><small>ต้นแบบ · ข้อมูลจำลองในเครื่องนี้</small></div></header>
+<main>
+  <section id="auth">
+    <h1>เข้าสู่ตลาด</h1>
+    <p>OTP สำหรับทดลองเท่านั้น กรุณาใช้เบอร์สมมติ ระบบไม่ส่ง SMS</p>
+    <form id="request"><label>เบอร์โทรสมมติ <input name="phone" type="tel" inputmode="numeric" pattern="0[0-9]{9}" placeholder="0800000000" required></label><button>ขอรหัสทดลอง</button></form>
+    <form id="verify" hidden><label>OTP <input name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" required></label><button>ยืนยัน</button></form>
+  </section>
+  <div id="market" hidden>
+    <nav aria-label="มุมมอง"><button data-view="buyer">ซื้ออาหาร</button><button data-view="seller">ร้านค้าทดลอง</button><button data-view="admin">แอดมินทดลอง</button><button id="logout">ออกจากระบบ</button></nav>
+    <section id="view"></section>
+  </div>
+  <p id="notice" role="status"></p>
+</main>
+<script type="module" src="./app.mjs"></script>
+</html>
