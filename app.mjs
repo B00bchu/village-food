@@ -35,13 +35,17 @@ function orderCard(order) {
       (order.delivery.note ? '<br>หมายเหตุ ' + escapeText(order.delivery.note) : '') + '</p>' : '';
   return '<article><h3>' + escapeText(item.name) + ' × ' + order.quantity + '</h3><p>' + escapeText(item.shop) +
     ' · โซน' + order.zone + ' · ฿' + order.total + '</p><p>' + (order.closed ?? statuses[order.status]) +
-    '</p>' + delivery + score + next + close + rate + '<details data-panel="history-' + order.id +
+    '</p>' + delivery + (order.payment ? '<p>ชำระ ' + paymentLabels[order.payment] +
+      ' · รับอาหาร ' + handoffLabels[order.handoff] + '</p>' : '') + score + next + close + rate + '<details data-panel="history-' + order.id +
     '"><summary>ประวัติสถานะ</summary><ol>' + history + '</ol></details>' + chat + '</article>';
 }
 
 const get = selector => document.querySelector(selector);
 const ordersKey = 'village-food-demo-v1';
 const catalogKey = 'village-food-catalog-v1';
+const customerKey = 'village-food-customer-v1';
+const paymentLabels = { cash: 'เงินสด', transfer: 'โอน / สแกน QR' };
+const handoffLabels = { handover: 'รอรับ', doorstep: 'แขวนไว้หน้าบ้าน' };
 const sellerKey = 'village-food-seller-v1';
 const guestKey = 'village-food-guest-v1';
 const read = (key, fallback) => JSON.parse(localStorage.getItem(key)) ?? fallback;
@@ -55,6 +59,7 @@ let catalog = readCatalog();
 let currentView = 'home';
 let zone = 'เหนือ';
 let seller;
+let customer;
 let demoShop;
 let checkout;
 let challenge;
@@ -93,7 +98,9 @@ function show(view) {
   get('#home').hidden = view !== 'home';
   get('#back').hidden = view === 'home';
   get('#auth').hidden = view !== 'registration';
-  get('#view').hidden = ['home', 'registration'].includes(view);
+  get('#customer-registration').hidden = view !== 'customer-registration';
+  get('#customer-form').reset();
+  get('#view').hidden = ['home', 'registration', 'customer-registration'].includes(view);
   get('#view').replaceChildren();
   get('#request').reset();
   get('#verify').reset();
@@ -107,27 +114,90 @@ get('main').addEventListener('click', event => {
   if (view === 'seller') {
     catalog = readCatalog();
     seller = catalog.shops.find(shop => shop.id === localStorage.getItem(sellerKey));
-    show(seller ? 'seller' : 'registration');
+    show(seller?.offer ? 'seller' : 'registration');
+    if (seller && !seller.offer) {
+      const form = get('#request');
+      form.elements.name.value = seller.name;
+      form.elements.phone.value = seller.phone;
+      form.elements.zone.value = seller.zone;
+    }
+  } else if (view === 'buyer') {
+    customer = read(customerKey, null);
+    show(customer ? 'buyer' : 'customer-registration');
+  } else if (view === 'edit-customer') {
+    show('customer-registration');
+    const form = get('#customer-form');
+    for (const name of ['name', 'house', 'phase', 'lane']) form.elements[name].value = customer[name];
   } else if (view) {
     show(view);
   }
 });
 
-get('#request').onsubmit = event => {
+get('#customer-form').onsubmit = event => {
+  event.preventDefault();
+  const data = new FormData(event.target);
+  const profile = Object.fromEntries(['name', 'house', 'phase', 'lane'].map(key =>
+    [key, data.get(key).trim()]));
+  if (Object.values(profile).some(value => !value)) {
+    notice('กรุณากรอกชื่อ บ้านเลขที่ เฟส และซอยให้ครบ');
+    return;
+  }
+  try {
+    localStorage.setItem(customerKey, JSON.stringify(profile));
+    customer = profile;
+    show('buyer');
+  } catch {
+    notice('บันทึกข้อมูลลูกค้าไม่ได้ กรุณาลองอีกครั้ง');
+  }
+};
+
+async function readQR(file) {
+  if (!file.size) return '';
+  if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type) || file.size > 512 * 1024) {
+    throw new Error('ใช้ภาพ PNG, JPG หรือ WebP ขนาดไม่เกิน 512 KB');
+  }
+  let image;
+  try {
+    image = await createImageBitmap(file);
+  } catch {
+    throw new Error('เปิดภาพ QR ไม่ได้ กรุณาเลือกไฟล์ใหม่');
+  }
+  image.close();
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(new Error('อ่านภาพ QR ไม่ได้ กรุณาเลือกไฟล์ใหม่'));
+    reader.readAsDataURL(file);
+  });
+}
+
+get('#request').onsubmit = async event => {
   event.preventDefault();
   const data = new FormData(event.target);
   const name = data.get('name').trim();
-  if (!name) {
-    notice('กรุณากรอกชื่อร้าน');
+  const offer = data.get('offer').trim();
+  if (!name || !offer) {
+    notice('กรุณากรอกชื่อและระบุว่าขายอะไร');
     return;
   }
-  const code = String(crypto.getRandomValues(new Uint32Array(1))[0] % 1000000).padStart(6, '0');
-  challenge = { name, phone: data.get('phone'), zone: data.get('zone'), code,
-    expires: Date.now() + 120000, remaining: 5 };
-  get('#verify').reset();
-  get('#verify').hidden = false;
-  get('#verify input').focus();
-  notice('รหัสทดลอง ' + code + ' ใช้ได้ 2 นาที');
+  challenge = undefined;
+  get('#verify').hidden = true;
+  event.submitter.disabled = true;
+  try {
+    const qr = await readQR(data.get('qr'));
+    if (currentView !== 'registration') return;
+    const code = String(crypto.getRandomValues(new Uint32Array(1))[0] % 1000000).padStart(6, '0');
+    challenge = { name, offer, qr, phone: data.get('phone'), zone: data.get('zone'), code,
+      expires: Date.now() + 120000, remaining: 5 };
+    get('#verify').reset();
+    get('#verify').hidden = false;
+    get('#verify input').focus();
+    notice('รหัสทดลอง ' + code + ' ใช้ได้ 2 นาที');
+  } catch (error) {
+    notice(error.message);
+  } finally {
+    event.submitter.disabled = false;
+  }
 };
 
 get('#verify').onsubmit = event => {
@@ -141,13 +211,16 @@ get('#verify').onsubmit = event => {
     notice('รหัสไม่ตรง เหลือ ' + challenge.remaining + ' ครั้ง');
     return;
   }
-  const { name, phone, zone } = challenge;
+  const { name, phone, zone, offer, qr } = challenge;
   challenge = undefined;
   update(catalogKey, data => {
     seller = data.shops.find(shop => shop.phone === phone);
     if (!seller) {
-      seller = { id: crypto.randomUUID(), name, phone, zone };
+      seller = { id: crypto.randomUUID(), name, phone, zone, offer, qr };
       data.shops.push(seller);
+    } else {
+      seller.offer = offer;
+      if (qr) seller.qr = qr;
     }
     return true;
   }, () => {
@@ -176,8 +249,30 @@ function buyerMenu() {
     '<p>' + rating(shopId(item)) + '</p><form data-item="' + item.id +
     '"><label>จำนวน<input name="quantity" type="number" min="1" max="20" value="1" required></label>' +
     '<button>ตรวจสอบออเดอร์</button></form></article>').join('');
-  return '<h1>สั่งอาหารใกล้บ้าน</h1><label>โซนจัดส่ง<select id="zone">' + zoneOptions +
+  return '<h1>สั่งอาหารใกล้บ้าน</h1><p>จัดส่งให้ ' + escapeText(customer.name) + ' · ' +
+    escapeText(customerAddress(customer)) + '</p><button class="secondary" data-page="edit-customer">แก้ไขที่อยู่</button> <label>โซนจัดส่ง<select id="zone">' + zoneOptions +
     '</select></label>' + cards + '<h2>ติดตามออเดอร์ของฉัน</h2>';
+}
+
+function customerAddress(profile) {
+  return 'บ้านเลขที่ ' + profile.house + ' · เฟส ' + profile.phase + ' · ซอย ' + profile.lane;
+}
+
+function transferQR(item) {
+  const qr = catalog.shops.find(shop => shop.id === item.shopId)?.qr;
+  return /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(qr ?? '') ? qr : '';
+}
+
+function refreshPayment(form) {
+  const qr = transferQR(checkout.item);
+  const transfer = form.querySelector('[value=transfer]');
+  const panel = form.querySelector('[data-qr-panel]');
+  transfer.disabled = !qr;
+  if (!qr && transfer.checked) form.elements.payment.value = 'cash';
+  panel.hidden = !qr || !transfer.checked;
+  const image = panel.querySelector('img');
+  if (!panel.hidden && image.getAttribute('src') !== qr) image.src = qr;
+  form.querySelector('[data-cash-only]').hidden = Boolean(qr);
 }
 
 function checkoutForm() {
@@ -185,8 +280,16 @@ function checkoutForm() {
   return '<h1>ตรวจสอบและยืนยันออเดอร์</h1><p>' + escapeText(item.name) + ' × ' +
     quantity + ' · ร้าน ' + escapeText(item.shop) + ' · โซน' + item.zone +
     '</p><p>ยอดรวม ฿' + item.price * quantity + ' · ส่งฟรีในรอบทดลอง</p>' +
-    '<form data-checkout><label>ชื่อผู้รับ<input name="name" maxlength="60" required></label>' +
-    '<label>บ้านเลขที่และจุดสังเกต<input name="address" maxlength="150" required></label>' +
+    '<p>จัดส่งให้ ' + escapeText(customer.name) + ' · ' + escapeText(customerAddress(customer)) + '</p>' +
+    '<form data-checkout><fieldset><legend>วิธีชำระเงิน</legend>' +
+    '<label><input type="radio" name="payment" value="cash" checked>เงินสด</label>' +
+    '<label><input type="radio" name="payment" value="transfer">โอน / สแกน QR</label>' +
+    '<p data-cash-only hidden>ร้านนี้รับเงินสดในรอบทดลอง</p>' +
+    '<div data-qr-panel hidden><p>QR รับโอนของร้าน ' + escapeText(item.shop) + '</p>' +
+    '<img class="payment-qr" alt="QR รับโอนของร้าน"><p>สำหรับทดลอง ระบบไม่มีการตรวจสอบยอดโอน</p></div></fieldset>' +
+    '<fieldset><legend>วิธีรับอาหาร</legend>' +
+    '<label><input type="radio" name="handoff" value="handover" checked>รอรับ</label>' +
+    '<label><input type="radio" name="handoff" value="doorstep">แขวนไว้หน้าบ้าน</label></fieldset>' +
     '<label>หมายเหตุ (ถ้ามี)<input name="note" maxlength="150"></label>' +
     '<button>ยืนยันสั่งอาหาร</button><button type="button" class="secondary" data-back-menu>กลับไปเลือกเมนู</button></form>';
 }
@@ -202,7 +305,11 @@ function sellerMenu() {
   const selector = '<label>ร้านที่จัดการ<select id="managed-shop"><option value="">ร้านของฉัน</option>' +
     demoOptions + '</select></label>';
   if (demoShop) return '<h1>ร้านทดลอง ' + demoShop + '</h1>' + selector + '<h2>ออเดอร์ร้านค้า</h2>';
-  return '<h1>ร้าน ' + escapeText(seller.name) + '</h1><p>จัดส่งโซน' + seller.zone + '</p>' + selector +
+  return '<h1>ร้าน ' + escapeText(seller.name) + '</h1><p>' + escapeText(seller.offer) +
+    ' · จัดส่งโซน' + seller.zone + '</p>' + selector +
+    '<details data-panel="shop-qr"><summary>QR รับโอนของร้าน</summary><form data-shop-qr>' +
+    '<label>อัปโหลดหรือเปลี่ยน QR<input name="qr" type="file" accept="image/png,image/jpeg,image/webp" required></label>' +
+    '<button>บันทึก QR</button></form><p>' + (seller.qr ? 'มี QR รับโอนแล้ว' : 'ร้านเปิดรับเงินสดอยู่') + '</p></details>' +
     '<h2>ลงขายอาหาร</h2><form data-listing><label>ชื่อเมนู<input name="name" maxlength="80" required></label>' +
     '<label>รายละเอียด<input name="description" maxlength="200" required></label>' +
     '<label>ราคา (บาท)<input name="price" type="number" min="1" max="9999" required></label>' +
@@ -222,6 +329,7 @@ function render() {
   if (view.hidden) return;
   if (checkout) {
     if (!view.querySelector('[data-checkout]')) view.innerHTML = checkoutForm();
+    refreshPayment(view.querySelector('[data-checkout]'));
     return;
   }
   const open = new Set([...view.querySelectorAll('details[open]')].map(panel => panel.dataset.panel));
@@ -252,7 +360,9 @@ function render() {
 }
 
 get('#view').onchange = event => {
-  if (event.target.id === 'zone') {
+  if (event.target.name === 'payment' && checkout) {
+    refreshPayment(event.target.form);
+  } else if (event.target.id === 'zone') {
     zone = event.target.value;
     render();
   } else if (event.target.id === 'managed-shop') {
@@ -287,15 +397,32 @@ get('#view').onclick = event => {
   }
 };
 
-get('#view').onsubmit = event => {
+get('#view').onsubmit = async event => {
   event.preventDefault();
   const actor = currentView;
   const form = event.target;
-  const { item, rate, chat, listing, checkout: confirm } = form.dataset;
+  const { item, rate, chat, listing, shopQr, checkout: confirm } = form.dataset;
   const formData = new FormData(form);
   const id = demoShop ?? seller?.id;
 
-  if (listing !== undefined && actor === 'seller' && !demoShop) {
+  if (shopQr !== undefined && actor === 'seller' && !demoShop) {
+    event.submitter.disabled = true;
+    try {
+      const qr = await readQR(formData.get('qr'));
+      if (!qr) return;
+      await update(catalogKey, data => {
+        const shop = data.shops.find(entry => entry.id === id);
+        if (!shop) return false;
+        shop.qr = qr;
+        if (seller?.id === id) seller = shop;
+        return true;
+      }, 'บันทึก QR รับโอนแล้ว');
+    } catch (error) {
+      notice(error.message);
+    } finally {
+      event.submitter.disabled = false;
+    }
+  } else if (listing !== undefined && actor === 'seller' && !demoShop) {
     const name = formData.get('name').trim();
     const description = formData.get('description').trim();
     const price = Number(formData.get('price'));
@@ -320,19 +447,20 @@ get('#view').onsubmit = event => {
     notice('');
     render();
   } else if (confirm !== undefined && checkout && actor === 'buyer') {
-    const delivery = { name: formData.get('name').trim(), address: formData.get('address').trim(),
+    const payment = formData.get('payment');
+    const handoff = formData.get('handoff');
+    if (!Object.hasOwn(paymentLabels, payment) || !Object.hasOwn(handoffLabels, handoff)) return;
+    const delivery = { name: customer.name, address: customerAddress(customer),
+      house: customer.house, phase: customer.phase, lane: customer.lane,
       note: formData.get('note').trim() };
-    if (!delivery.name || !delivery.address) {
-      notice('กรุณากรอกชื่อผู้รับและจุดจัดส่ง');
-      return;
-    }
     const selection = checkout;
     checkout = undefined;
     update(ordersKey, data => {
+      if (payment === 'transfer' && !transferQR(selection.item)) return false;
       const order = createOrder({ id: crypto.randomUUID(), buyer, item: selection.item.id,
         zone: selection.item.zone, quantity: selection.quantity, listings: listings() });
       if (!order) return false;
-      order.delivery = delivery;
+      Object.assign(order, { delivery, payment, handoff });
       data.unshift(order);
       return true;
     }, 'ส่งออเดอร์ทดลองแล้ว ร้านเป็นผู้จัดส่ง');
@@ -360,7 +488,10 @@ get('#view').onsubmit = event => {
 
 window.addEventListener('storage', event => {
   if (event.key === ordersKey) orders = read(ordersKey, []);
-  else if (event.key === catalogKey) catalog = readCatalog();
+  else if (event.key === catalogKey) {
+    catalog = readCatalog();
+    seller = catalog.shops.find(shop => shop.id === seller?.id);
+  }
   else return;
   render();
 });

@@ -18,15 +18,29 @@
     <button data-page="admin" class="secondary">ภาพรวมแอดมินทดลอง</button>
   </section>
   <nav id="back" hidden><button data-page="home" class="secondary">กลับหน้าแรก</button></nav>
+  <section id="customer-registration" hidden>
+    <h1>ลงทะเบียนลูกค้า</h1>
+    <p>บันทึกที่อยู่จัดส่งไว้ใช้กับออเดอร์ถัดไป ใช้ข้อมูลสมมติสำหรับทดลอง</p>
+    <form id="customer-form">
+      <label>ชื่อผู้รับ<input name="name" maxlength="60" required></label>
+      <label>บ้านเลขที่<input name="house" maxlength="30" required></label>
+      <label>เฟส<input name="phase" maxlength="30" required></label>
+      <label>ซอย<input name="lane" maxlength="30" required></label>
+      <button>บันทึกและเลือกอาหาร</button>
+    </form>
+  </section>
   <section id="auth" hidden>
     <h1>ลงทะเบียนแม่ค้า</h1>
     <p>ใช้เบอร์สมมติ รหัส OTP ทดลองจะแสดงในหน้านี้</p>
     <form id="request">
-      <label>ชื่อร้าน<input name="name" maxlength="60" required></label>
+      <label>ชื่อแม่ค้าหรือชื่อร้าน<input name="name" maxlength="60" required></label>
+      <label>ขายอะไร<input name="offer" maxlength="120" required></label>
       <label>เบอร์โทรสมมติ<input name="phone" type="tel" inputmode="numeric" pattern="0[0-9]{9}" placeholder="0800000000" required></label>
       <label>โซนจัดส่ง<select name="zone"><option>เหนือ</option><option>ใต้</option></select></label>
+      <label>QR รับโอน (ถ้ามี)<input name="qr" type="file" accept="image/png,image/jpeg,image/webp" aria-describedby="qr-help"></label>
       <button>ขอ OTP ทดลอง</button>
     </form>
+    <p id="qr-help">ใช้ภาพ QR สำหรับทดลอง ขนาดไม่เกิน 512 KB ร้านที่ยังไม่ใส่ QR รับเงินสดได้</p>
     <form id="verify" hidden>
       <label>OTP<input name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" required></label>
       <button>ยืนยันและเปิดร้าน</button>

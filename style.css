@@ -28,3 +28,7 @@ summary { cursor: pointer; }
 .secondary { background: white; color: #194536; }
 form + h2, #view > h2:not(:first-child) { margin-top: 1rem; }
 form label { max-width: 100%; }
+form fieldset { flex-basis: 100%; min-width: 0; border: 1px solid #cfdbd2; border-radius: .5rem; }
+form fieldset label { display: inline-flex; align-items: center; gap: .4rem; margin-inline-end: 1rem; }
+input[type="radio"] { min-height: auto; accent-color: #194536; }
+.payment-qr { display: block; width: min(100%, 14rem); height: auto; margin-block: .5rem; }
